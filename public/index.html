@@ -162,6 +162,12 @@
     </div><!-- end modal-panel -->
   </div><!-- end sales-modal-overlay -->
 
+  <script>
+    // Detect if we are in an iframe
+    if (window.self !== window.top) {
+      document.body.classList.add('is-iframe');
+    }
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

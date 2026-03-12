@@ -21,9 +21,23 @@
 body {
   font-family: 'Montserrat', sans-serif;
   color: var(--text-dark);
-  background-color: var(--bg-light);
+  background-color: transparent; /* Changed to transparent for better embedding */
   line-height: 1.5;
-  padding-bottom: 80px;
+  padding-bottom: 20px; /* Reduced from 80px */
+}
+
+/* Helper for iframe embedding */
+body.is-iframe {
+  background-color: transparent !important;
+}
+
+body.is-iframe .container {
+  padding: 10px;
+  max-width: 100%;
+}
+
+body.is-iframe .hero {
+  padding: 20px 0;
 }
 
 /* Animations */
@@ -139,9 +153,10 @@ p { font-size: 0.95rem; color: var(--text-light); }
 /* Pricing Grid */
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 25px;
   margin-top: 30px;
+  padding-top: 15px; /* Added padding to prevent hover cutoff at top */
   animation: fadeIn 1s ease-out;
 }
 
