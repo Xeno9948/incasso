@@ -170,15 +170,14 @@
 
     function sendHeight() {
       if (window.self !== window.top && wrapper) {
-        // Fallback to highest measurable element
+        // ONLY use the wrapper's rect. Do not use scrollHeight 
+        // because the parent adding 40px will artificially increase docHeight,
+        // causing an infinite loop of expansion.
         const rect = wrapper.getBoundingClientRect();
-        const wrapperHeight = Math.ceil(rect.height);
-        const docHeight = Math.ceil(document.documentElement.scrollHeight);
-        const height = Math.max(wrapperHeight, docHeight);
+        const height = Math.ceil(rect.height);
         
-        if (height > 0 && Math.abs(height - lastHeight) > 0) {
+        if (height > 0 && Math.abs(height - lastHeight) > 2) {
           lastHeight = height;
-          // Send un-throttled exact height
           window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
           document.body.classList.add('is-iframe');
         }
