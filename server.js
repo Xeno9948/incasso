@@ -93,13 +93,16 @@ app.post('/api/checkout', async (req, res) => {
     const baseUrl = `${protocol}://${req.headers.host}`;
 
     // 2. Create the FIRST payment to obtain a mandate
+    const isRecurring = config.molliePaymentType !== 'once';
+    const sequenceType = isRecurring ? 'first' : 'oneoff';
+
     const payment = await mollieClient.payments.create({
       amount: {
         value: amountStr,
         currency: 'EUR'
       },
       customerId: mollieCustomer.id,
-      sequenceType: 'first',
+      sequenceType: sequenceType,
       method: methods,
       description: `Eerste verificatiebetaling voor ${descriptionStr}`,
       redirectUrl: `${baseUrl}/success.html`,
@@ -170,34 +173,37 @@ app.post('/api/webhook', async (req, res) => {
 
     // Retrieve payment details from Mollie to verify its status
     const payment = await mollieClient.payments.get(paymentId);
+    
+    // Load config inside webhook to ensure it's not stale
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
 
-    // If this is a successful first payment, create the subscription
-    if (payment.isPaid() && payment.sequenceType === 'first' && payment.customerId) {
-      console.log(`Payment successful for Customer ${payment.customerId}. Creating subscription...`);
-
+    // If this is a successful payment
+    if (payment.isPaid()) {
       const { yearlyAmount, description, customerName, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
 
-      // Create a subscription using configured interval
-      await mollieClient.customers_subscriptions.create({
-        customerId: payment.customerId,
-        amount: {
-          currency: 'EUR',
-          value: yearlyAmount,
-        },
-        interval: config.mollieInterval || '12 months',
-        description: payment.description || description,
-      });
+      // Create subscription ONLY if it was a recurring payment
+      if (payment.sequenceType === 'first' && payment.customerId && config.molliePaymentType !== 'once') {
+        console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
+        
+        await mollieClient.customers_subscriptions.create({
+          customerId: payment.customerId,
+          amount: {
+            currency: 'EUR',
+            value: yearlyAmount,
+          },
+          interval: config.mollieInterval || '12 months',
+          description: payment.description || description,
+        });
+        console.log(`Subscription created successfully for Customer ${payment.customerId}!`);
+      }
 
-      console.log(`Subscription created successfully for Customer ${payment.customerId}!`);
+      // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
+      if (config.crmWebhookUrl) {
+        console.log('Sending lead to CRM webhook:', config.crmWebhookUrl);
+        
+        const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}`;
 
-      // ─── FIRE CRM WEBHOOK ─────────────────────────────────────
-      try {
-        const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-        if (config.crmWebhookUrl) {
-          console.log('Sending lead to CRM webhook:', config.crmWebhookUrl);
-          
-          const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}`;
-
+        try {
           await fetch(config.crmWebhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -218,9 +224,9 @@ app.post('/api/webhook', async (req, res) => {
             })
           });
           console.log('CRM webhook sent successfully!');
+        } catch (err) {
+          console.error('Failed to send CRM webhook:', err);
         }
-      } catch (err) {
-        console.error('Failed to send CRM webhook:', err);
       }
     }
 

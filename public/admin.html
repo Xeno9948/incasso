@@ -293,6 +293,13 @@
                   <option value="12 months">Jaarlijks</option>
                 </select>
               </div>
+              <div class="field">
+                <label>Betalingstype</label>
+                <select id="mollie-payment-type">
+                  <option value="recurring">Doorlopend (Abonnement)</option>
+                  <option value="once">Eenmalig</option>
+                </select>
+              </div>
               <div class="field full">
                 <label>Betaalomschrijving Template</label>
                 <input type="text" id="mollie-description" placeholder="Kiyoh Abonnement: {PACKAGE}">
@@ -349,6 +356,7 @@ let config = {
   crmWebhookUrl: '',
   mollieMethods: 'ideal, creditcard, bancontact',
   mollieInterval: '12 months',
+  molliePaymentType: 'recurring',
   mollieDescription: 'Kiyoh Abonnement: {PACKAGE}'
 };
 let password = '';
@@ -377,6 +385,7 @@ async function tryLogin() {
   if (!config.crmWebhookUrl) config.crmWebhookUrl = '';
   if (!config.mollieMethods) config.mollieMethods = 'ideal, creditcard, bancontact';
   if (!config.mollieInterval) config.mollieInterval = '12 months';
+  if (!config.molliePaymentType) config.molliePaymentType = 'recurring';
   if (!config.mollieDescription) config.mollieDescription = 'Kiyoh Abonnement: {PACKAGE}';
 
   password = pw;
@@ -410,10 +419,11 @@ function renderAll() {
   });
   
   document.getElementById('mollie-interval').value = config.mollieInterval || '12 months';
+  document.getElementById('mollie-payment-type').value = config.molliePaymentType || 'recurring';
   document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
   
   // Set dynamic embed code with FULLSCREEN & REDIRECT support
-  const currentOrigin = window.location.origin;
+  const currentOrigin = "https://payment.kiyoh.com";
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
     const iframeId = "kiyoh-pricing-iframe";
@@ -716,6 +726,7 @@ async function saveConfig() {
   config.mollieMethods = selectedMethods.join(', ');
   
   config.mollieInterval = document.getElementById('mollie-interval').value;
+  config.molliePaymentType = document.getElementById('mollie-payment-type').value;
   config.mollieDescription = document.getElementById('mollie-description').value.trim();
 
   const res = await fetch('/api/config', {
