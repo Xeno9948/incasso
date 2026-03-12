@@ -163,10 +163,18 @@
   </div><!-- end sales-modal-overlay -->
 
   <script>
-    // Detect if we are in an iframe
-    if (window.self !== window.top) {
-      document.body.classList.add('is-iframe');
+    // Robust Iframe Resizing & Detection
+    function sendHeight() {
+      if (window.self !== window.top) {
+        const height = document.documentElement.scrollHeight || document.body.scrollHeight;
+        window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
+        document.body.classList.add('is-iframe');
+      }
     }
+    window.addEventListener('load', sendHeight);
+    window.addEventListener('resize', sendHeight);
+    // Send height periodically in case of dynamic content loading
+    setInterval(sendHeight, 1000);
   </script>
   <script src="app.js"></script>
 </body>

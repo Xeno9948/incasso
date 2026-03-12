@@ -21,23 +21,14 @@
 body {
   font-family: 'Montserrat', sans-serif;
   color: var(--text-dark);
-  background-color: transparent; /* Changed to transparent for better embedding */
+  background-color: var(--bg-light); /* Restored original background */
   line-height: 1.5;
-  padding-bottom: 20px; /* Reduced from 80px */
+  padding-bottom: 120px; /* Increased to prevent cut-off at bottom */
 }
 
 /* Helper for iframe embedding */
 body.is-iframe {
-  background-color: transparent !important;
-}
-
-body.is-iframe .container {
-  padding: 10px;
-  max-width: 100%;
-}
-
-body.is-iframe .hero {
-  padding: 20px 0;
+  padding-bottom: 150px;
 }
 
 /* Animations */

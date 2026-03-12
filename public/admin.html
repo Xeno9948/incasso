@@ -272,9 +272,9 @@
             <div class="field-grid">
               <div class="field full">
                 <label>Embed Code</label>
-                <textarea id="embed-code-textarea" readonly style="font-family: monospace; font-size: 0.85rem; background: #f8f9fa; cursor: pointer; min-height: 100px;" onclick="this.select()"></textarea>
+                <textarea id="embed-code-textarea" readonly style="font-family: monospace; font-size: 0.85rem; background: #f8f9fa; cursor: pointer; min-height: 120px;" onclick="this.select()"></textarea>
                 <div style="color:#888; font-size:0.8rem; margin-top:8px;">
-                  <i class="fas fa-info-circle"></i> Tip: klik op de code om alles te selecteren. De URL wordt automatisch aangepast naar het domein waar je nu op werkt. Mocht de module afgekapt worden, verhoog dan de <code>height="800"</code> pixel waarde.
+                  <i class="fas fa-info-circle"></i> Tip: De bovenstaande code bevat een script dat de hoogte automatisch probeert aan te passen. Mocht de module toch afgekapt worden in WordPress, verhoog dan handmatig de <code>height="1000"</code> pixel waarde in de iframe tag.
                 </div>
               </div>
             </div>
@@ -347,11 +347,22 @@ function renderAll() {
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
   
-  // Set dynamic embed code
+  // Set dynamic embed code with auto-resize script
   const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
-    embedTextarea.value = `<iframe src="${currentOrigin}/" width="100%" height="900" style="border:none; overflow:hidden;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>`;
+    const iframeId = "kiyoh-pricing-iframe";
+    embedTextarea.value = `<div id="kiyoh-container" style="width:100%; min-height:600px;">
+  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="1000" style="border:none; transition: height 0.3s ease;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>
+</div>
+<script>
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'kiyoh-resize') {
+      var iframe = document.getElementById('${iframeId}');
+      if (iframe) iframe.style.height = (e.data.height + 20) + 'px';
+    }
+  }, false);
+</scr` + `ipt>`;
   }
 }
 
