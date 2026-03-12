@@ -347,27 +347,48 @@ function renderAll() {
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
   
-  // Set dynamic embed code with auto-resize script
+  // Set dynamic embed code with auto-resize and FULLSCREEN support
   const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
     const iframeId = "kiyoh-pricing-iframe";
     embedTextarea.value = `<div id="kiyoh-outer-wrapper" style="width:100%; min-height:600px; background:#ffffff; overflow:hidden;">
-  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="900" style="border:none; transition: height 0.3s ease; display:block; margin-bottom:0;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>
+  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="900" style="border:none; transition: all 0.3s ease; display:block; margin:0;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>
 </div>
+<style>
+  .kiyoh-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999999999 !important;
+    background: #fff;
+  }
+</style>
 <script>
   (function() {
     var lastH = 0;
     window.addEventListener('message', function(e) {
+      var iframe = document.getElementById('${iframeId}');
+      if (!iframe) return;
+
       if (e.data && e.data.type === 'kiyoh-resize') {
-        var iframe = document.getElementById('${iframeId}');
-        if (iframe) {
-          var newH = e.data.height + 30; // 30px safety buffer
-          if (Math.abs(lastH - newH) > 5) {
-            lastH = newH;
-            iframe.style.height = newH + 'px';
-          }
+        var newH = e.data.height + 35;
+        if (Math.abs(lastH - newH) > 10) {
+          lastH = newH;
+          iframe.style.height = newH + 'px';
         }
+      }
+      
+      if (e.data && e.data.type === 'kiyoh-maximize') {
+        iframe.classList.add('kiyoh-fullscreen');
+        document.body.style.overflow = 'hidden';
+      }
+      
+      if (e.data && e.data.type === 'kiyoh-minimize') {
+        iframe.classList.remove('kiyoh-fullscreen');
+        document.body.style.overflow = '';
       }
     }, false);
   })();

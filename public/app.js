@@ -104,11 +104,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
     showModalPanel('modules');
+    // Notify parent to maximize iframe
+    if (window.self !== window.top) {
+      window.parent.postMessage({ type: 'kiyoh-maximize' }, '*');
+    }
   }
 
   function closeModal() {
     modal.classList.remove('open');
     document.body.style.overflow = '';
+    // Notify parent to minimize iframe
+    if (window.self !== window.top) {
+      window.parent.postMessage({ type: 'kiyoh-minimize' }, '*');
+    }
   }
 
   function showModalPanel(panel) {
