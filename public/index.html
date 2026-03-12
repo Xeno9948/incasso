@@ -16,7 +16,7 @@
   <div class="journey-wrapper">
 
     <!-- STEP 1: Packages -->
-    <div id="step-1" class="step-container step-active">
+    <div id="step-1" class="step-container step-active" style="padding-bottom: 30px;">
       <section class="container">
         <div class="pricing-grid" id="pricing-grid">
           
@@ -163,18 +163,20 @@
   </div><!-- end sales-modal-overlay -->
 
   <script>
-    // Robust Iframe Resizing - TARGETING SPECIFIC CONTENT
+    // Bulletproof Iframe Resizing
     let lastHeight = 0;
     function sendHeight() {
       if (window.self !== window.top) {
-        // Target the actual content wrapper to avoid measuring expanding body/html
+        // Measure the absolute bottom of the container
         const wrapper = document.querySelector('.journey-wrapper');
         if (!wrapper) return;
         
-        const height = wrapper.offsetHeight;
+        // Use getBoundingClientRect to get precise height including padding/transformed kids
+        const rect = wrapper.getBoundingClientRect();
+        const height = Math.ceil(rect.height);
         
         // Only send if height changed and is not zero
-        if (height > 0 && Math.abs(height - lastHeight) > 5) {
+        if (height > 0 && Math.abs(height - lastHeight) > 10) {
           lastHeight = height;
           window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
           document.body.classList.add('is-iframe');
@@ -183,7 +185,6 @@
     }
     window.addEventListener('load', sendHeight);
     window.addEventListener('resize', sendHeight);
-    // Observe DOM changes within the wrapper for instant resizing
     if (window.MutationObserver) {
       const observer = new MutationObserver(sendHeight);
       const wrapper = document.querySelector('.journey-wrapper');
