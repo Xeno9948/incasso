@@ -271,12 +271,27 @@
           <div class="item-card-body" style="display:block; padding: 20px;">
             <div class="field-grid">
               <div class="field">
-                <label>Betaalmethoden <span style="color:#aaa;font-weight:400;">(komma gescheiden)</span></label>
-                <input type="text" id="mollie-methods" placeholder="ideal, creditcard, bancontact">
+                <label>Betaalmethoden</label>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:5px;">
+                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
+                    <input type="checkbox" class="mollie-method-checkbox" value="ideal"> iDEAL
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
+                    <input type="checkbox" class="mollie-method-checkbox" value="creditcard"> Creditcard
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
+                    <input type="checkbox" class="mollie-method-checkbox" value="bancontact"> Bancontact
+                  </label>
+                </div>
               </div>
               <div class="field">
-                <label>Facturatie-interval <span style="color:#aaa;font-weight:400;">(bijv. 12 months)</span></label>
-                <input type="text" id="mollie-interval" placeholder="12 months">
+                <label>Facturatie-interval</label>
+                <select id="mollie-interval">
+                  <option value="1 month">Maandelijks</option>
+                  <option value="3 months">Kwartaal</option>
+                  <option value="6 months">Halfjaar</option>
+                  <option value="12 months">Jaarlijks</option>
+                </select>
               </div>
               <div class="field full">
                 <label>Betaalomschrijving Template</label>
@@ -387,7 +402,13 @@ function renderAll() {
   document.getElementById('ga-conversion-id').value = config.googleAdsConversionId || '';
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
-  document.getElementById('mollie-methods').value = config.mollieMethods || 'ideal, creditcard, bancontact';
+  
+  // Set Mollie checkboxes
+  const methods = (config.mollieMethods || 'ideal, creditcard, bancontact').split(',').map(m => m.trim());
+  document.querySelectorAll('.mollie-method-checkbox').forEach(cb => {
+    cb.checked = methods.includes(cb.value);
+  });
+  
   document.getElementById('mollie-interval').value = config.mollieInterval || '12 months';
   document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
   
@@ -688,8 +709,13 @@ async function saveConfig() {
   config.googleAdsConversionId = document.getElementById('ga-conversion-id').value.trim();
   config.googleAdsConversionLabel = document.getElementById('ga-conversion-label').value.trim();
   config.crmWebhookUrl = document.getElementById('crm-webhook-url').value.trim();
-  config.mollieMethods = document.getElementById('mollie-methods').value.trim();
-  config.mollieInterval = document.getElementById('mollie-interval').value.trim();
+  
+  // Collect Mollie methods from checkboxes
+  const selectedMethods = [];
+  document.querySelectorAll('.mollie-method-checkbox:checked').forEach(cb => selectedMethods.push(cb.value));
+  config.mollieMethods = selectedMethods.join(', ');
+  
+  config.mollieInterval = document.getElementById('mollie-interval').value;
   config.mollieDescription = document.getElementById('mollie-description').value.trim();
 
   const res = await fetch('/api/config', {
