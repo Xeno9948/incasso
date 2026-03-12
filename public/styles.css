@@ -23,12 +23,12 @@ body {
   color: var(--text-dark);
   background-color: var(--bg-light); 
   line-height: 1.5;
-  padding-bottom: 60px; /* Reduced to avoid infinite scroll sensation */
+  padding-bottom: 0; /* Removed padding that caused feedback loops */
 }
 
 /* Helper for iframe embedding */
 body.is-iframe {
-  padding-bottom: 40px;
+  padding-bottom: 0;
 }
 
 body.is-iframe .container {

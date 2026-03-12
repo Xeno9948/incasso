@@ -352,22 +352,25 @@ function renderAll() {
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
     const iframeId = "kiyoh-pricing-iframe";
-    embedTextarea.value = `<div id="kiyoh-container" style="width:100%; min-height:600px; background:#ffffff;">
-  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="900" style="border:none; transition: height 0.3s ease; display:block;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>
+    embedTextarea.value = `<div id="kiyoh-outer-wrapper" style="width:100%; min-height:600px; background:#ffffff; overflow:hidden;">
+  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="900" style="border:none; transition: height 0.3s ease; display:block; margin-bottom:0;" scrolling="no" title="Kiyoh Tarieven" loading="lazy"></iframe>
 </div>
 <script>
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'kiyoh-resize') {
-      var iframe = document.getElementById('${iframeId}');
-      if (iframe) {
-        // Only update if the height is different to prevent layout shifting
-        var newHeight = e.data.height + 10; 
-        if (Math.abs(parseInt(iframe.style.height) - newHeight) > 10) {
-          iframe.style.height = newHeight + 'px';
+  (function() {
+    var lastH = 0;
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'kiyoh-resize') {
+        var iframe = document.getElementById('${iframeId}');
+        if (iframe) {
+          var newH = e.data.height + 30; // 30px safety buffer
+          if (Math.abs(lastH - newH) > 5) {
+            lastH = newH;
+            iframe.style.height = newH + 'px';
+          }
         }
       }
-    }
-  }, false);
+    }, false);
+  })();
 </scr` + `ipt>`;
   }
 }
