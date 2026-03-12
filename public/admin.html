@@ -186,6 +186,7 @@
         <div class="section-label">Integraties</div>
         <a href="#" onclick="showSection('googleads', this)"><i class="fab fa-google fa-fw"></i> Google Ads</a>
         <a href="#" onclick="showSection('crm', this)"><i class="fas fa-plug fa-fw"></i> CRM Webhook</a>
+        <a href="#" onclick="showSection('mollie', this)"><i class="fas fa-credit-card fa-fw"></i> Mollie Instellingen</a>
         <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code fa-fw"></i> Iframe Embed</a>
       </div>
     </nav>
@@ -262,6 +263,33 @@
         </div>
       </div>
 
+      <!-- MOLLIE SETTINGS -->
+      <div id="section-mollie" class="section">
+        <h2>Mollie Instellingen</h2>
+        <p class="section-desc">Beheer hoe betalingen en abonnementen worden verwerkt in Mollie.</p>
+        <div class="item-card">
+          <div class="item-card-body" style="display:block; padding: 20px;">
+            <div class="field-grid">
+              <div class="field">
+                <label>Betaalmethoden <span style="color:#aaa;font-weight:400;">(komma gescheiden)</span></label>
+                <input type="text" id="mollie-methods" placeholder="ideal, creditcard, bancontact">
+              </div>
+              <div class="field">
+                <label>Facturatie-interval <span style="color:#aaa;font-weight:400;">(bijv. 12 months)</span></label>
+                <input type="text" id="mollie-interval" placeholder="12 months">
+              </div>
+              <div class="field full">
+                <label>Betaalomschrijving Template</label>
+                <input type="text" id="mollie-description" placeholder="Kiyoh Abonnement: {PACKAGE}">
+                <div style="color:#888; font-size:0.8rem; margin-top:4px;">
+                  Gebruik <code>{PACKAGE}</code> voor de pakketnaam en <code>{LEVEL}</code> voor modules.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- IFRAME EMBED -->
       <div id="section-embed" class="section">
         <h2>Website Integratie (Iframe)</h2>
@@ -297,7 +325,17 @@ const ICONS = [
 ];
 
 // ── STATE ─────────────────────────────────────────────────────
-let config = { packages: [], modules: [], coreFeatures: [], googleAdsConversionId: '', googleAdsConversionLabel: '', crmWebhookUrl: '' };
+let config = { 
+  packages: [], 
+  modules: [], 
+  coreFeatures: [], 
+  googleAdsConversionId: '', 
+  googleAdsConversionLabel: '', 
+  crmWebhookUrl: '',
+  mollieMethods: 'ideal, creditcard, bancontact',
+  mollieInterval: '12 months',
+  mollieDescription: 'Kiyoh Abonnement: {PACKAGE}'
+};
 let password = '';
 
 // ── LOGIN ─────────────────────────────────────────────────────
@@ -322,6 +360,9 @@ async function tryLogin() {
   if (!config.googleAdsConversionId) config.googleAdsConversionId = '';
   if (!config.googleAdsConversionLabel) config.googleAdsConversionLabel = '';
   if (!config.crmWebhookUrl) config.crmWebhookUrl = '';
+  if (!config.mollieMethods) config.mollieMethods = 'ideal, creditcard, bancontact';
+  if (!config.mollieInterval) config.mollieInterval = '12 months';
+  if (!config.mollieDescription) config.mollieDescription = 'Kiyoh Abonnement: {PACKAGE}';
 
   password = pw;
   document.getElementById('login-screen').style.display = 'none';
@@ -346,6 +387,9 @@ function renderAll() {
   document.getElementById('ga-conversion-id').value = config.googleAdsConversionId || '';
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
+  document.getElementById('mollie-methods').value = config.mollieMethods || 'ideal, creditcard, bancontact';
+  document.getElementById('mollie-interval').value = config.mollieInterval || '12 months';
+  document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
   
   // Set dynamic embed code with FULLSCREEN & REDIRECT support
   const currentOrigin = window.location.origin;
@@ -644,6 +688,9 @@ async function saveConfig() {
   config.googleAdsConversionId = document.getElementById('ga-conversion-id').value.trim();
   config.googleAdsConversionLabel = document.getElementById('ga-conversion-label').value.trim();
   config.crmWebhookUrl = document.getElementById('crm-webhook-url').value.trim();
+  config.mollieMethods = document.getElementById('mollie-methods').value.trim();
+  config.mollieInterval = document.getElementById('mollie-interval').value.trim();
+  config.mollieDescription = document.getElementById('mollie-description').value.trim();
 
   const res = await fetch('/api/config', {
     method: 'POST',

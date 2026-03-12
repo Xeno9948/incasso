@@ -57,9 +57,19 @@ app.post('/api/checkout', async (req, res) => {
     const user_ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     if (utms) utms.user_ip = user_ip;
 
+    // Load config for dynamic settings
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const methods = config.mollieMethods ? config.mollieMethods.split(',').map(m => m.trim()) : ['ideal', 'creditcard', 'bancontact'];
+    const interval = config.mollieInterval || '12 months';
+    let descriptionTemplate = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
+
     // VERY IMPORTANT: Calculate total on the backend to prevent tampering
     let calculatedTotal = package.price;
-    let descriptionStr = `Kiyoh Abonnement: ${package.name} pakket`;
+    let modulesStr = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen';
+    
+    // Replace template tags
+    descriptionTemplate = descriptionTemplate.replace('{PACKAGE}', package.name).replace('{LEVEL}', modulesStr);
+    let descriptionStr = descriptionTemplate;
 
     if (modules && modules.length > 0) {
       modules.forEach(m => {
@@ -90,7 +100,7 @@ app.post('/api/checkout', async (req, res) => {
       },
       customerId: mollieCustomer.id,
       sequenceType: 'first',
-      method: ['ideal', 'creditcard', 'bancontact'],
+      method: methods,
       description: `Eerste verificatiebetaling voor ${descriptionStr}`,
       redirectUrl: `${baseUrl}/success.html`,
       cancelUrl: `${baseUrl}/cancel.html`,
@@ -132,10 +142,11 @@ app.post('/api/checkout', async (req, res) => {
             telefoon: customer.phone || '',
             email: customer.email,
             collega: "Systeem",
-            upsell: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
+            status: "opvolgen",
+            upsell: "NB",
+            product: "Kiyoh",
             message: explicitMessage,
             feature: package.name,
-            contact_moment: "Opvolgen",
             deal_waarde: amountStr,
             utm: utms || {}
           })
@@ -166,15 +177,15 @@ app.post('/api/webhook', async (req, res) => {
 
       const { yearlyAmount, description, customerName, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
 
-      // Create a yearly subscription (charge once per year, same amount as first payment)
+      // Create a subscription using configured interval
       await mollieClient.customers_subscriptions.create({
         customerId: payment.customerId,
         amount: {
           currency: 'EUR',
-          value: yearlyAmount,  // Yearly total, charged once per year
+          value: yearlyAmount,
         },
-        interval: '12 months',
-        description: description,
+        interval: config.mollieInterval || '12 months',
+        description: payment.description || description,
       });
 
       console.log(`Subscription created successfully for Customer ${payment.customerId}!`);
@@ -197,10 +208,11 @@ app.post('/api/webhook', async (req, res) => {
               telefoon: customerPhone,
               email: customerEmail,
               collega: "Systeem",
-              upsell: modulesList,
+              status: "won",
+              upsell: "NB",
+              product: "Kiyoh",
               message: explicitMessage,
               feature: packageId,
-              contact_moment: "Direct online afgesloten",
               deal_waarde: yearlyAmount,
               utm: utms || {}
             })
