@@ -269,7 +269,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const data = await res.json();
 
       if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
+        // If in iframe, request parent to handle checkout redirect
+        if (window.self !== window.top) {
+          window.parent.postMessage({ type: 'kiyoh-checkout', checkoutUrl: data.checkoutUrl }, '*');
+          checkoutBtn.textContent = 'Bezig met omleiden…';
+        } else {
+          window.location.href = data.checkoutUrl;
+        }
       } else {
         alert('Er ging iets mis bij het genereren van de betaallink.');
         checkoutBtn.textContent = 'Start Abonnement 🔒';

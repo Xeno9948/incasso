@@ -347,7 +347,7 @@ function renderAll() {
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
   
-  // Set dynamic embed code with auto-resize and FULLSCREEN support
+  // Set dynamic embed code with FULLSCREEN & REDIRECT support
   const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
@@ -373,14 +373,21 @@ function renderAll() {
       var iframe = document.getElementById('${iframeId}');
       if (!iframe) return;
 
+      // 1. Handle Auto-Resize (Safety buffer)
       if (e.data && e.data.type === 'kiyoh-resize') {
-        var newH = e.data.height + 35;
-        if (Math.abs(lastH - newH) > 10) {
+        var newH = e.data.height + 40;
+        if (Math.abs(lastH - newH) > 20) {
           lastH = newH;
           iframe.style.height = newH + 'px';
         }
       }
       
+      // 2. Handle Mollie Checkout Redirect (Fixes CSP block)
+      if (e.data && e.data.type === 'kiyoh-checkout' && e.data.checkoutUrl) {
+        window.location.href = e.data.checkoutUrl;
+      }
+      
+      // 3. Handle Fullscreen Modal Expand
       if (e.data && e.data.type === 'kiyoh-maximize') {
         iframe.classList.add('kiyoh-fullscreen');
         document.body.style.overflow = 'hidden';
