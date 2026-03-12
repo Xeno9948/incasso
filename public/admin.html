@@ -272,11 +272,9 @@
             <div class="field-grid">
               <div class="field full">
                 <label>Embed Code</label>
-                <textarea id="embed-code-textarea" readonly style="font-family: monospace; font-size: 0.85rem; background: #f8f9fa; cursor: pointer; min-height: 100px;" onclick="this.select()">
-&lt;iframe src="https://jouw-domein.nl/" width="100%" height="800" style="border:none; overflow:hidden;" scrolling="no" title="Kiyoh Tarieven"&gt;&lt;/iframe&gt;
-                </textarea>
+                <textarea id="embed-code-textarea" readonly style="font-family: monospace; font-size: 0.85rem; background: #f8f9fa; cursor: pointer; min-height: 100px;" onclick="this.select()"></textarea>
                 <div style="color:#888; font-size:0.8rem; margin-top:8px;">
-                  <i class="fas fa-info-circle"></i> Tip: klik op de code om alles te selecteren. Vervang <code>https://jouw-domein.nl/</code> door de daadwerkelijke URL waar deze applicatie draait (of je Railway app url). Mocht de module afgekapt worden, verhoog dan de <code>height="800"</code> pixel waarde.
+                  <i class="fas fa-info-circle"></i> Tip: klik op de code om alles te selecteren. De URL wordt automatisch aangepast naar het domein waar je nu op werkt. Mocht de module afgekapt worden, verhoog dan de <code>height="800"</code> pixel waarde.
                 </div>
               </div>
             </div>
@@ -348,6 +346,13 @@ function renderAll() {
   document.getElementById('ga-conversion-id').value = config.googleAdsConversionId || '';
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
+  
+  // Set dynamic embed code
+  const currentOrigin = window.location.origin;
+  const embedTextarea = document.getElementById('embed-code-textarea');
+  if (embedTextarea) {
+    embedTextarea.value = `<iframe src="${currentOrigin}/" width="100%" height="800" style="border:none; overflow:hidden;" scrolling="no" title="Kiyoh Tarieven"></iframe>`;
+  }
 }
 
 // ── PACKAGES ──────────────────────────────────────────────────
