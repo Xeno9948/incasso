@@ -508,7 +508,11 @@ p { font-size: 0.9rem; color: var(--text-light); }
 /* ===== SALES JOURNEY MODAL ===== */
 .sales-modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   background: rgba(0,0,0,0.55);
   backdrop-filter: blur(4px);
   z-index: 1000;
