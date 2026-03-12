@@ -170,8 +170,11 @@
 
     function sendHeight() {
       if (window.self !== window.top && wrapper) {
+        // Fallback to highest measurable element
         const rect = wrapper.getBoundingClientRect();
-        const height = Math.ceil(rect.height);
+        const wrapperHeight = Math.ceil(rect.height);
+        const docHeight = Math.ceil(document.documentElement.scrollHeight);
+        const height = Math.max(wrapperHeight, docHeight);
         
         if (height > 0 && Math.abs(height - lastHeight) > 0) {
           lastHeight = height;
@@ -193,6 +196,9 @@
     // 2. Event Listeners
     window.addEventListener('load', sendHeight);
     window.addEventListener('resize', sendHeight);
+    if (document.fonts) {
+      document.fonts.ready.then(sendHeight);
+    }
 
     // 3. ResizeObserver (The Gold Standard)
     if (window.ResizeObserver && wrapper) {
