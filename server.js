@@ -159,6 +159,7 @@ app.post('/api/checkout', async (req, res) => {
             feature: package.name,
             deal_waarde: amountStr,
             source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
+            external_id: payment.id,
             utm: utms || {}
           })
         }).catch(e => console.error('Error sending abandoned cart webhook:', e));
@@ -232,6 +233,7 @@ app.post('/api/webhook', async (req, res) => {
               feature: packageId,
               deal_waarde: yearlyAmount,
               source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
+              external_id: paymentId,
               utm: utms || {}
             })
           });
