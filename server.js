@@ -8,17 +8,16 @@ const CONFIG_PATH = path.join(__dirname, 'config.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kiyoh-admin-2024';
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Initialize Mollie Client with user's test key
-// API Key: test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD
-// Profile ID: pfl_67ohzSjw6s
-const mollieClient = createMollieClient({ apiKey: 'test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD' });
+// Initialize Mollie Client with environment variable
+const mollieApiKey = process.env.MOLLIE_API_KEY || 'test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD';
+const mollieClient = createMollieClient({ apiKey: mollieApiKey });
 
 // Setup Config API Routes
 app.get('/api/config', (req, res) => {
@@ -79,6 +78,10 @@ app.post('/api/checkout', async (req, res) => {
       email: customer.email,
     });
 
+    // Determine base URL dynamically (Railway uses https by default)
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const baseUrl = `${protocol}://${req.headers.host}`;
+
     // 2. Create the FIRST payment to obtain a mandate
     const payment = await mollieClient.payments.create({
       amount: {
@@ -89,9 +92,9 @@ app.post('/api/checkout', async (req, res) => {
       sequenceType: 'first',
       method: ['ideal', 'creditcard', 'bancontact'],
       description: `Eerste verificatiebetaling voor ${descriptionStr}`,
-      redirectUrl: `http://localhost:${port}/success.html`,
-      cancelUrl: `http://localhost:${port}/cancel.html`,
-      webhookUrl: 'https://replace-with-your-ngrok-url.ngrok-free.app/api/webhook', // Needed for localhost testing
+      redirectUrl: `${baseUrl}/success.html`,
+      cancelUrl: `${baseUrl}/cancel.html`,
+      webhookUrl: `${baseUrl}/api/webhook`, 
       metadata: {
         packageId: package.name,
         yearlyAmount: amountStr,  // This IS the yearly total (monthly * 12)
