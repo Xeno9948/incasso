@@ -23,7 +23,11 @@ body {
   color: var(--text-dark);
   background-color: var(--bg-light); 
   line-height: 1.5;
-  padding-bottom: 0; /* Removed padding that caused feedback loops */
+  padding-bottom: 0;
+}
+
+.journey-wrapper {
+  padding-bottom: 24px; /* Hard bottom buffer for iframe height calculation */
 }
 
 /* Helper for iframe embedding */
