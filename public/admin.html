@@ -437,7 +437,8 @@ function renderAll() {
     top: 0 !important;
     left: 0 !important;
     width: 100vw !important;
-    height: 100vh !important;
+    height: 100% !important;
+    height: 100dvh !important;
     z-index: 9999999999 !important;
     background: #fff;
   }
@@ -452,7 +453,7 @@ function renderAll() {
       // 1. Handle Auto-Resize (Safety buffer)
       if (e.data && e.data.type === 'kiyoh-resize') {
         var newH = e.data.height + 40;
-        if (Math.abs(lastH - newH) > 20) {
+        if (Math.abs(lastH - newH) > 2) {
           lastH = newH;
           iframe.style.height = newH + 'px';
         }
