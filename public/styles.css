@@ -28,6 +28,7 @@ body {
 
 .journey-wrapper {
   padding-bottom: 24px; /* Hard bottom buffer for iframe height calculation */
+  min-height: 900px; /* Guarantee iframe calculates a large height on initial render */
 }
 
 /* Helper for iframe embedding */
