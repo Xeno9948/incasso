@@ -166,32 +166,43 @@
   <script>
     // Bulletproof Iframe Resizing
     let lastHeight = 0;
+    const wrapper = document.querySelector('.journey-wrapper');
+
     function sendHeight() {
-      if (window.self !== window.top) {
-        // Measure the absolute bottom of the container
-        const wrapper = document.querySelector('.journey-wrapper');
-        if (!wrapper) return;
-        
-        // Use getBoundingClientRect to get precise height including padding/transformed kids
+      if (window.self !== window.top && wrapper) {
         const rect = wrapper.getBoundingClientRect();
         const height = Math.ceil(rect.height);
         
-        // Only send if height changed and is not zero
-        if (height > 0 && Math.abs(height - lastHeight) > 10) {
+        if (height > 0 && Math.abs(height - lastHeight) > 2) {
           lastHeight = height;
           window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
           document.body.classList.add('is-iframe');
         }
       }
     }
+
+    // 1. Initial burst (fixes "cut off on first load")
+    // Send height every 200ms for the first 2 seconds
+    let burstCount = 0;
+    const burstInterval = setInterval(() => {
+      sendHeight();
+      if (++burstCount > 10) clearInterval(burstInterval);
+    }, 200);
+
+    // 2. Event Listeners
     window.addEventListener('load', sendHeight);
     window.addEventListener('resize', sendHeight);
-    if (window.MutationObserver) {
+
+    // 3. ResizeObserver (The Gold Standard)
+    if (window.ResizeObserver && wrapper) {
+      const ro = new ResizeObserver(sendHeight);
+      ro.observe(wrapper);
+      // Also observe document.body for safety
+      ro.observe(document.body);
+    } else if (window.MutationObserver && wrapper) {
       const observer = new MutationObserver(sendHeight);
-      const wrapper = document.querySelector('.journey-wrapper');
-      if (wrapper) observer.observe(wrapper, { subtree: true, childList: true, attributes: true });
+      observer.observe(wrapper, { subtree: true, childList: true, attributes: true });
     }
-    setInterval(sendHeight, 2000); 
   </script>
   <script src="app.js"></script>
 </body>
