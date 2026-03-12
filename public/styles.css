@@ -2,7 +2,7 @@
   --primary-orange: #dd6825;
   --hover-orange: #c45a1f;
   --accent-green: #68b03d;
-  --bg-light: #f9f9fa;
+  --bg-light: #ffffff; /* Changed to white as requested */
   --text-dark: #333333;
   --text-light: #666666;
   --gradient-orange: linear-gradient(135deg, rgba(221, 104, 37, 0.95) 0%, rgba(254, 198, 26, 0.9) 100%);
@@ -21,14 +21,18 @@
 body {
   font-family: 'Montserrat', sans-serif;
   color: var(--text-dark);
-  background-color: var(--bg-light); /* Restored original background */
+  background-color: var(--bg-light); 
   line-height: 1.5;
-  padding-bottom: 120px; /* Increased to prevent cut-off at bottom */
+  padding-bottom: 60px; /* Reduced to avoid infinite scroll sensation */
 }
 
 /* Helper for iframe embedding */
 body.is-iframe {
-  padding-bottom: 150px;
+  padding-bottom: 40px;
+}
+
+body.is-iframe .container {
+  padding: 0 10px;
 }
 
 /* Animations */
@@ -66,10 +70,16 @@ body.is-iframe {
 }
 
 /* Typography */
-h1 { font-size: 2.2rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; color: #1a1a1a; }
-h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: 1rem; }
-h3 { font-size: 1.25rem; font-weight: 700; }
-p { font-size: 0.95rem; color: var(--text-light); }
+h1 { font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; color: #1a1a1a; }
+h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+p { font-size: 0.9rem; color: var(--text-light); }
+
+@media (max-width: 480px) {
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.3rem; }
+  .price { font-size: 1.8rem !important; }
+}
 
 /* Buttons */
 .btn {

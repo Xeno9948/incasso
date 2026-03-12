@@ -163,18 +163,30 @@
   </div><!-- end sales-modal-overlay -->
 
   <script>
-    // Robust Iframe Resizing & Detection
+    // Robust Iframe Resizing & Detection (Fixed for infinite growth)
+    let lastHeight = 0;
     function sendHeight() {
       if (window.self !== window.top) {
-        const height = document.documentElement.scrollHeight || document.body.scrollHeight;
-        window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
-        document.body.classList.add('is-iframe');
+        const height = Math.max(
+          document.body.scrollHeight, 
+          document.documentElement.scrollHeight,
+          document.body.offsetHeight, 
+          document.documentElement.offsetHeight,
+          document.body.clientHeight,
+          document.documentElement.clientHeight
+        );
+        
+        // Only send if height changed significantly to prevent growth loops
+        if (Math.abs(height - lastHeight) > 10) {
+          lastHeight = height;
+          window.parent.postMessage({ type: 'kiyoh-resize', height: height }, '*');
+          document.body.classList.add('is-iframe');
+        }
       }
     }
     window.addEventListener('load', sendHeight);
     window.addEventListener('resize', sendHeight);
-    // Send height periodically in case of dynamic content loading
-    setInterval(sendHeight, 1000);
+    setInterval(sendHeight, 1500); // Check every 1.5s
   </script>
   <script src="app.js"></script>
 </body>
