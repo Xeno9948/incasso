@@ -131,8 +131,9 @@ app.post('/api/checkout', async (req, res) => {
     // Send to CRM immediately so we have the lead even if they abandon Mollie checkout
     try {
       const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-      if (config.crmWebhookUrl) {
-        console.log('Sending abandoned cart lead to CRM webhook:', config.crmWebhookUrl);
+      const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      if (crmUrl) {
+        console.log('Sending abandoned cart lead to CRM webhook:', crmUrl);
         // Fire in background, don't await
         
         // Build an explicit message with selected package & modules
@@ -152,7 +153,7 @@ app.post('/api/checkout', async (req, res) => {
             telefoon: customer.phone || '',
             email: customer.email,
             collega: "Systeem",
-            status: "opvolgen",
+            status: "Opvolgen",
             upsell: "NB",
             product: "Kiyoh",
             message: explicitMessage,
@@ -207,13 +208,14 @@ app.post('/api/webhook', async (req, res) => {
       }
 
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
-      if (config.crmWebhookUrl) {
-        console.log('Sending lead to CRM webhook:', config.crmWebhookUrl);
+      const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      if (crmUrl) {
+        console.log('Sending lead to CRM webhook:', crmUrl);
         
         const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}`;
 
         try {
-          await fetch(config.crmWebhookUrl, {
+          await fetch(crmUrl, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -226,7 +228,7 @@ app.post('/api/webhook', async (req, res) => {
               telefoon: customerPhone,
               email: customerEmail,
               collega: "Systeem",
-              status: "won",
+              status: "Won",
               upsell: "NB",
               product: "Kiyoh",
               message: explicitMessage,
