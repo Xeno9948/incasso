@@ -141,7 +141,10 @@ app.post('/api/checkout', async (req, res) => {
 
         fetch(config.crmWebhookUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'User-Agent': 'Kiyoh-Webhook-Client/1.0'
+          },
           body: JSON.stringify({
             aanmelding_type: "Kiyoh Online Abonnement",
             bedrijf: customer.name,
@@ -155,6 +158,7 @@ app.post('/api/checkout', async (req, res) => {
             message: explicitMessage,
             feature: package.name,
             deal_waarde: amountStr,
+            source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
             utm: utms || {}
           })
         }).catch(e => console.error('Error sending abandoned cart webhook:', e));
@@ -210,7 +214,10 @@ app.post('/api/webhook', async (req, res) => {
         try {
           await fetch(config.crmWebhookUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'User-Agent': 'Kiyoh-Webhook-Client/1.0'
+            },
             body: JSON.stringify({
               aanmelding_type: "Kiyoh Online Abonnement",
               bedrijf: customerName,
@@ -224,6 +231,7 @@ app.post('/api/webhook', async (req, res) => {
               message: explicitMessage,
               feature: packageId,
               deal_waarde: yearlyAmount,
+              source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
               utm: utms || {}
             })
           });
