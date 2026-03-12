@@ -13,6 +13,10 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize Mollie Client with environment variable
