@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tarieven | Kiyoh</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Multi-Step Journey Wrapper -->
+  <div class="journey-wrapper">
+
+    <!-- STEP 1: Packages -->
+    <div id="step-1" class="step-container step-active">
+      <section class="container">
+        <div class="pricing-grid" id="pricing-grid">
+          
+          <!-- Go Package -->
+          <div class="pricing-card" data-package="go" data-price="35">
+            <div class="pricing-header">
+              <h3>Go</h3>
+              <p>150 invites per maand</p>
+              <div class="price">€35<span>/mnd</span></div>
+              <div class="billing-note" style="font-size: 0.85rem; color: #666; margin-top: 5px;">Jaarlijks gefactureerd: <strong>€420,- /jaar</strong></div>
+            </div>
+            <ul class="features-list">
+              <li>Shopreviews in Google Shopping & Ads</li>
+              <li>Verbeterde SEO door reviews</li>
+              <li>Personaliseren van uitnodigingsmail</li>
+              <li>Automatisch uitnodigen (plug-ins)</li>
+              <li>Eigen maatwerk vragenlijst</li>
+              <li>Reageren op beoordelingen</li>
+              <li>Full service support</li>
+            </ul>
+            <button class="btn btn-outline package-select-btn">Selecteer Go</button>
+          </div>
+
+          <div class="pricing-card" data-package="pro" data-price="45">
+            <div class="pricing-header">
+              <div class="popular-badge">Meest gekozen</div>
+              <h3>Pro</h3>
+              <p>Vanaf 300 invites per maand</p>
+              <div class="price">€45<span>/mnd</span></div>
+              <div class="billing-note" style="font-size: 0.85rem; color: #666; margin-top: 5px;">Jaarlijks gefactureerd: <strong>€540,- /jaar</strong></div>
+            </div>
+            <ul class="features-list">
+              <li>Shopreviews in Google Shopping & Ads</li>
+              <li>Verbeterde SEO door reviews</li>
+              <li>Personaliseren van uitnodigingsmail</li>
+              <li>Automatisch uitnodigen (plug-ins)</li>
+              <li>Eigen maatwerk vragenlijst</li>
+              <li>Reageren op beoordelingen</li>
+              <li>Full service support</li>
+            </ul>
+            <button class="btn btn-primary package-select-btn">Selecteer Pro</button>
+          </div>
+
+          <div class="pricing-card" data-package="premium" data-price="100">
+            <div class="pricing-header">
+              <h3>Premium</h3>
+              <p>Vanaf 3000 invites per maand</p>
+              <div class="price">€100<span>/mnd</span></div>
+              <div class="billing-note" style="font-size: 0.85rem; color: #666; margin-top: 5px;">Jaarlijks gefactureerd: <strong>€1.200,- /jaar</strong></div>
+            </div>
+            <ul class="features-list">
+              <li>Shopreviews in Google Shopping & Ads</li>
+              <li>Verbeterde SEO door reviews</li>
+              <li>Personaliseren van uitnodigingsmail</li>
+              <li>Automatisch uitnodigen (plug-ins)</li>
+              <li>Eigen maatwerk vragenlijst</li>
+              <li>Reageren op beoordelingen</li>
+              <li>Full service support</li>
+            </ul>
+            <button class="btn btn-outline package-select-btn">Selecteer Premium</button>
+          </div>
+
+        </div><!-- end pricing-grid -->
+
+      </section>
+    </div><!-- end step-1 -->
+
+  </div><!-- end journey-wrapper -->
+
+  <!-- ===== SALES JOURNEY MODAL ===== -->
+  <div id="sales-modal" class="sales-modal-overlay" aria-hidden="true">
+    <div class="sales-modal-panel">
+
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <button class="modal-close-btn" id="modal-close-btn" aria-label="Sluiten">&times;</button>
+        <!-- Step indicators -->
+        <div class="modal-steps-indicator">
+          <span class="ms-step active" id="ms-step-1-dot">1. Modules</span>
+          <span class="ms-divider">›</span>
+          <span class="ms-step" id="ms-step-2-dot">2. Afronden</span>
+        </div>
+        <div class="modal-selected-package">
+          <span>Geselecteerd: </span><strong id="modal-package-label">Pro</strong>
+        </div>
+      </div>
+
+      <!-- Panel A: Module Selection -->
+      <div id="modal-panel-modules" class="modal-panel active">
+        <div class="modal-panel-inner">
+          <h2>Optimaliseer je <strong id="step2-package-name" class="text-orange">Pro</strong> pakket</h2>
+          <p style="color:#777; margin-bottom: 24px;">Voeg optionele modules toe voor extra functionaliteit. Alle prijzen zijn maandelijks, jaarlijks gefactureerd.</p>
+
+          <div id="modules-grid">
+            <!-- Dynamically rendered by app.js from /api/config -->
+          </div>
+
+        </div>
+
+        <!-- Sticky footer inside panel -->
+        <div class="modal-footer">
+          <div class="modal-total-preview">
+            Totaal: <strong id="modal-total-preview">€45/mnd</strong> <span style="color:#999; font-size:0.8rem;">(jaarlijks gefactureerd)</span>
+          </div>
+          <button class="btn btn-primary" id="btn-go-to-checkout">Ga naar afronden &rarr;</button>
+        </div>
+      </div>
+
+      <!-- Panel B: Checkout -->
+      <div id="modal-panel-checkout" class="modal-panel">
+        <div class="modal-panel-inner">
+          <h2>Afronden</h2>
+
+          <!-- Order Summary -->
+          <div class="checkout-summary-box">
+            <h3>Overzicht</h3>
+            <div class="summary-row">
+              <strong id="summary-package-name">Pro Pakket (Jaarlijks)</strong>
+              <strong id="summary-package-price">€540,00</strong>
+            </div>
+            <div id="summary-modules-list"></div>
+            <div class="summary-row summary-total">
+              <strong>Totaal per jaar</strong>
+              <strong id="summary-total-price" class="text-orange">€540,00</strong>
+            </div>
+          </div>
+
+          <!-- Customer Details -->
+          <h3 style="margin: 24px 0 12px;">Uw Gegevens</h3>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <input type="text" id="customer-name" placeholder="Bedrijfsnaam / Naam" required class="input-field">
+            <input type="email" id="customer-email" placeholder="E-mailadres" required class="input-field">
+            <input type="tel" id="customer-phone" placeholder="Telefoonnummer" required class="input-field">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-outline" id="btn-back-to-modules">← Terug naar modules</button>
+          <button class="btn btn-primary" id="checkout-btn">Start Abonnement 🔒</button>
+        </div>
+      </div>
+
+    </div><!-- end modal-panel -->
+  </div><!-- end sales-modal-overlay -->
+
+  <script src="app.js"></script>
+</body>
+</html>

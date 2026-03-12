@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.mhtml
+extract_mhtml.py
+extracted_*.html
+parse_text.py
+pricing_text.txt
+.env

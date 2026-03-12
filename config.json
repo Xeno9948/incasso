@@ -1,0 +1,148 @@
+{
+  "packages": [
+    {
+      "id": "go",
+      "name": "Go",
+      "price": 35,
+      "subtitle": "150 invites per maand",
+      "popular": false,
+      "features": [
+        "Shopreviews in Google Shopping & Ads",
+        "Verbeterde SEO door reviews",
+        "Personaliseren van uitnodigingsmail",
+        "Automatisch uitnodigen (plug-ins)",
+        "Eigen maatwerk vragenlijst",
+        "Reageren op beoordelingen",
+        "Full service support"
+      ]
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "price": 45,
+      "subtitle": "Vanaf 300 invites per maand",
+      "popular": true,
+      "features": [
+        "Shopreviews in Google Shopping & Ads",
+        "Verbeterde SEO door reviews",
+        "Personaliseren van uitnodigingsmail",
+        "Automatisch uitnodigen (plug-ins)",
+        "Eigen maatwerk vragenlijst",
+        "Reageren op beoordelingen",
+        "Full service support"
+      ]
+    },
+    {
+      "id": "premium",
+      "name": "Premium",
+      "price": 100,
+      "subtitle": "Vanaf 3000 invites per maand",
+      "popular": false,
+      "features": [
+        "Shopreviews in Google Shopping & Ads",
+        "Verbeterde SEO door reviews",
+        "Personaliseren van uitnodigingsmail",
+        "Automatisch uitnodigen (plug-ins)",
+        "Eigen maatwerk vragenlijst",
+        "Reageren op beoordelingen",
+        "Full service support"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "xml-feed",
+      "name": "XML-feed Integratie",
+      "price": 20,
+      "description": "Publiceer reviews in eigen huisstijl met automatische synchronisatie op je website of in mailings.",
+      "image": "https://kiyoh.com/wp-content/uploads/xml-met-muis.gif",
+      "link": "https://kiyoh.com/kiyoh-xml-feed-automatische-reviewkoppeling-voor-jouw-website/"
+    },
+    {
+      "id": "easy-click",
+      "name": "Easy Click Module",
+      "price": 10,
+      "description": "Laat klanten via één simpele klik direct in de e-mail een score geven. Verhoogt respons met 11%.",
+      "image": "https://kiyoh.com/wp-content/uploads/2024/09/easy-click.svg",
+      "link": "https://kiyoh.com/ons-reviewsysteem-features-2/"
+    },
+    {
+      "id": "personal-invite-link",
+      "name": "Personal Invite Link",
+      "price": 15,
+      "description": "Verstuur gepersonaliseerde uitnodigingen via WhatsApp, SMS, Facebook, met unieke review links.",
+      "image": "https://kiyoh.com/wp-content/uploads/reviewlink.gif",
+      "link": "https://kiyoh.com/verzamel-reviews-met-een-unieke-reviewlink/"
+    },
+    {
+      "id": "productreviews",
+      "name": "Productreviews",
+      "price": 25,
+      "description": "Verzamel reviews op productniveau en val extra op in Google Shopping. Minder retouren.",
+      "image": "https://kiyoh.com/wp-content/uploads/2024/09/product-reviews.svg",
+      "link": "https://kiyoh.com/product-review/"
+    },
+    {
+      "id": "qr-code",
+      "name": "QR Code Reviews",
+      "price": 10,
+      "description": "Laat in je fysieke winkel een QR-code scannen. Perfect voor offline promotie en deurbestickering.",
+      "image": "https://kiyoh.com/wp-content/uploads/Qr-Code-Anmated-Web.gif",
+      "link": "https://www.kiyoh.com/qr-code/"
+    },
+    {
+      "id": "new-1773240469889",
+      "name": "Nieuwe Module",
+      "price": 0,
+      "description": "",
+      "image": "",
+      "link": ""
+    }
+  ],
+  "coreFeatures": [
+    {
+      "id": "shop-reviews",
+      "icon": "fas fa-star",
+      "title": "Shop Reviews",
+      "description": "Met Shop Reviews begint het allemaal. Zowel consumenten als zakelijke kopers willen zeker weten dat zij met een betrouwbare leverancier te maken hebben. Laat zien dat je betrouwbaar bent!",
+      "link": "https://kiyoh.com/features-aanvragen/"
+    },
+    {
+      "id": "widget",
+      "icon": "fas fa-magic",
+      "title": "Kies jouw perfecte widget",
+      "description": "Naast onze vertrouwde standaard widget bieden we een breed scala aan widgets aan. Kies eenvoudig de stijl die het beste past bij jouw website design en kopieer simpelweg de widgetcode.",
+      "link": "https://kiyoh.com/features-aanvragen/"
+    },
+    {
+      "id": "auto-collect",
+      "icon": "fas fa-envelope-open-text",
+      "title": "Auto Collect (BCC)",
+      "description": "BCC betekent Blind Carbon Copy. Naar aanleiding van een BCC kopie van je uitgaande mails kunnen wij volledig automatisch een reviewverzoek naar je klant versturen of inplannen.",
+      "link": "https://kiyoh.com/features-aanvragen/"
+    },
+    {
+      "id": "foto-module",
+      "icon": "fas fa-camera",
+      "title": "Foto module",
+      "description": "Gebruik je reviews als portfolio! Vul je reviews aan met foto's van de klant. Deze reviews geven een direct beeld van o.a. interieurartikelen of bouwprojecten als extra inspiratie.",
+      "link": "https://kiyoh.com/features-aanvragen/"
+    },
+    {
+      "id": "offline-promotie",
+      "icon": "fas fa-bullhorn",
+      "title": "Offline promotie",
+      "description": "Laat je review score ook offline spreken. Overweeg een baliestandaard, auto- of deursticker, of poster. Overtuig klanten in je showroom of wachtruimte met fysieke promotiemiddelen.",
+      "link": "https://kiyoh.com/offline-promotie/"
+    },
+    {
+      "id": "reviewsplit",
+      "icon": "fas fa-columns",
+      "title": "Reviewsplit",
+      "description": "Verdeel je reviews over platforms als Kiyoh, Google en Facebook voor maximale zichtbaarheid en online aanwezigheid.",
+      "link": "https://kiyoh.com/kiyoh-reviewsplit-meer-zichtbaarheid-via-google-facebook-en-kiyoh/"
+    }
+  ],
+  "googleAdsConversionId": "",
+  "googleAdsConversionLabel": ""
+}
