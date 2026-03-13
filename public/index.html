@@ -170,11 +170,11 @@
 
     function sendHeight() {
       if (window.self !== window.top && wrapper) {
-        // ONLY use the wrapper's rect. Do not use scrollHeight 
-        // because the parent adding 40px will artificially increase docHeight,
-        // causing an infinite loop of expansion.
+        // Use rect.bottom instead of rect.height. 
+        // rect.height ignores the fact that the wrapper might be pushed down by a 30px top margin/padding.
+        // rect.bottom is the absolute coordinate relative to the viewport top!
         const rect = wrapper.getBoundingClientRect();
-        const height = Math.ceil(rect.height);
+        const height = Math.ceil(rect.bottom);
         
         if (height > 0 && Math.abs(height - lastHeight) > 2) {
           lastHeight = height;
