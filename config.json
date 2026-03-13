@@ -144,5 +144,8 @@
     }
   ],
   "googleAdsConversionId": "",
-  "googleAdsConversionLabel": ""
+  "googleAdsConversionLabel": "",
+  "mollieTestMode": true,
+  "mollieLiveKey": "",
+  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD"
 }

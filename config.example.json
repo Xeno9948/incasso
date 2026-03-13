@@ -17,5 +17,8 @@
   "mollieMethods": "ideal, creditcard, bancontact",
   "mollieInterval": "12 months",
   "molliePaymentType": "recurring",
-  "mollieDescription": "Kiyoh Abonnement: {PACKAGE}"
+  "mollieDescription": "Kiyoh Abonnement: {PACKAGE}",
+  "mollieTestMode": true,
+  "mollieLiveKey": "",
+  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD"
 }

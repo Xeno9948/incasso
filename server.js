@@ -42,9 +42,23 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Initialize Mollie Client with environment variable
-const mollieApiKey = process.env.MOLLIE_API_KEY || 'test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD';
-const mollieClient = createMollieClient({ apiKey: mollieApiKey });
+// Helper to get Mollie Client dynamically
+function getMollieClient() {
+  const config = getConfig();
+  const testMode = config.mollieTestMode !== false; // Default to true if not specified
+  
+  // Priority: 1. Env Var, 2. Config, 3. Hardcoded Test Key
+  const liveKey = process.env.MOLLIE_LIVE_KEY || config.mollieLiveKey;
+  const testKey = process.env.MOLLIE_TEST_KEY || config.mollieTestKey || 'test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD';
+  
+  const apiKey = testMode ? testKey : liveKey;
+  
+  if (!apiKey) {
+    console.error('MOLLIE ERROR: No API Key found for mode:', testMode ? 'TEST' : 'LIVE');
+  }
+
+  return createMollieClient({ apiKey: apiKey });
+}
 
 // Setup Config API Routes
 app.get('/api/config', (req, res) => {
@@ -106,6 +120,7 @@ app.post('/api/checkout', async (req, res) => {
     const amountStr = yearlyTotal.toFixed(2);
 
     // 1. Create a Mollie Customer
+    const mollieClient = getMollieClient();
     const mollieCustomer = await mollieClient.customers.create({
       name: customer.name,
       email: customer.email,
@@ -202,6 +217,7 @@ app.post('/api/webhook', async (req, res) => {
     if (!paymentId) return res.status(400).send('No id provided');
 
     // Retrieve payment details from Mollie to verify its status
+    const mollieClient = getMollieClient();
     const payment = await mollieClient.payments.get(paymentId);
     
     // Load config inside webhook to ensure it's not stale

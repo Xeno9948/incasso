@@ -228,6 +228,23 @@
         <p class="section-desc">Configureer hoe betalingen worden verwerkt via Mollie.</p>
         <div class="field-grid">
           <div class="field full">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;background:#fdf5f0;padding:12px;border-radius:10px;border:1px solid rgba(245,130,32,0.2);">
+              <input type="checkbox" id="mollie-test-mode" style="width:20px;height:20px;accent-color:#f58220;">
+              <div style="flex:1;">
+                <strong style="display:block;font-size:0.9rem;color:#f58220;">Mollie Test Modus</strong>
+                <span style="font-size:0.75rem;color:#888;text-transform:none;font-weight:400;letter-spacing:0;">Gebruik de Test API Key voor testbetalingen.</span>
+              </div>
+            </label>
+          </div>
+          <div class="field">
+            <label>Live API Key</label>
+            <input type="text" id="mollie-live-key" placeholder="live_...">
+          </div>
+          <div class="field">
+            <label>Test API Key</label>
+            <input type="text" id="mollie-test-key" placeholder="test_...">
+          </div>
+          <div class="field full">
             <label>Beschikbare Betaalmethoden</label>
             <div class="checkbox-group">
               <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="ideal"> iDEAL</label>
@@ -312,7 +329,10 @@ let config = {
   mollieMethods: 'ideal, creditcard, bancontact',
   mollieInterval: '12 months',
   molliePaymentType: 'recurring',
-  mollieDescription: 'Kiyoh Abonnement: {PACKAGE}'
+  mollieDescription: 'Kiyoh Abonnement: {PACKAGE}',
+  mollieTestMode: true,
+  mollieLiveKey: '',
+  mollieTestKey: ''
 };
 let password = '';
 
@@ -341,6 +361,9 @@ async function tryLogin() {
   if (!config.mollieInterval) config.mollieInterval = '12 months';
   if (!config.molliePaymentType) config.molliePaymentType = 'recurring';
   if (!config.mollieDescription) config.mollieDescription = 'Kiyoh Abonnement: {PACKAGE}';
+  if (config.mollieTestMode === undefined) config.mollieTestMode = true;
+  if (!config.mollieLiveKey) config.mollieLiveKey = '';
+  if (!config.mollieTestKey) config.mollieTestKey = '';
 
   password = pw;
   document.getElementById('login-screen').style.display = 'none';
@@ -372,6 +395,9 @@ function renderAll() {
   document.getElementById('mollie-interval').value = config.mollieInterval || '12 months';
   document.getElementById('mollie-payment-type').value = config.molliePaymentType || 'recurring';
   document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
+  document.getElementById('mollie-test-mode').checked = !!config.mollieTestMode;
+  document.getElementById('mollie-live-key').value = config.mollieLiveKey || '';
+  document.getElementById('mollie-test-key').value = config.mollieTestKey || '';
   
   const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
@@ -678,6 +704,9 @@ async function saveConfig() {
   config.mollieInterval = document.getElementById('mollie-interval').value;
   config.molliePaymentType = document.getElementById('mollie-payment-type').value;
   config.mollieDescription = document.getElementById('mollie-description').value.trim();
+  config.mollieTestMode = document.getElementById('mollie-test-mode').checked;
+  config.mollieLiveKey = document.getElementById('mollie-live-key').value.trim();
+  config.mollieTestKey = document.getElementById('mollie-test-key').value.trim();
 
   const res = await fetch('/api/config', {
     method: 'POST',
