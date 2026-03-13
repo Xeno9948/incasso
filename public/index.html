@@ -199,6 +199,13 @@
       document.fonts.ready.then(sendHeight);
     }
 
+    // 2.1. Handshake Listener (Parent is ready)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'kiyoh-parent-ready') {
+        sendHeight();
+      }
+    });
+
     // 3. ResizeObserver (The Gold Standard)
     if (window.ResizeObserver && wrapper) {
       const ro = new ResizeObserver(sendHeight);

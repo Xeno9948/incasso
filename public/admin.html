@@ -429,7 +429,7 @@ function renderAll() {
   if (embedTextarea) {
     const iframeId = "kiyoh-pricing-iframe";
     embedTextarea.value = `<div id="kiyoh-outer-wrapper" style="width:100%; min-height:1800px; background:#ffffff; overflow:hidden;">
-  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="1800" style="border:none; display:block; margin:0;" scrolling="no" title="Kiyoh Tarieven"></iframe>
+  <iframe id="${iframeId}" src="${currentOrigin}/" width="100%" height="100%" style="border:none; display:block; margin:0;" scrolling="no" title="Kiyoh Tarieven"></iframe>
 </div>
 <style>
   .kiyoh-fullscreen {
@@ -446,8 +446,9 @@ function renderAll() {
 <script>
   (function() {
     var lastH = 0;
+    var iframe = document.getElementById('${iframeId}');
+
     window.addEventListener('message', function(e) {
-      var iframe = document.getElementById('${iframeId}');
       if (!iframe) return;
 
       // 1. Handle Auto-Resize (Safety buffer)
@@ -475,6 +476,19 @@ function renderAll() {
         document.body.style.overflow = '';
       }
     }, false);
+
+    // Signal the iframe that the parent is ready
+    function notifyReady() {
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'kiyoh-parent-ready' }, '*');
+      }
+    }
+
+    // Cover both cases: iframe already loaded, or not yet
+    if (iframe) {
+      iframe.addEventListener('load', notifyReady);
+      notifyReady(); // in case it already fired
+    }
   })();
 </scr` + `ipt>`;
   }
