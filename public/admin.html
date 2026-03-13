@@ -452,8 +452,8 @@ function renderAll() {
 
       // 1. Handle Auto-Resize (Safety buffer)
       if (e.data && e.data.type === 'kiyoh-resize') {
-        var newH = e.data.height + 40;
-        if (Math.abs(lastH - newH) > 2) {
+        var newH = e.data.height + 60; // Increased buffer for shadows/glows
+        if (lastH !== newH) { // Removed strict 2px threshold to catch all font load changes
           lastH = newH;
           iframe.style.height = newH + 'px';
         }
