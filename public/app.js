@@ -233,12 +233,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ─── CHECKOUT ─────────────────────────────────────────────
   checkoutBtn.addEventListener('click', async () => {
-    const name  = document.getElementById('customer-name').value.trim();
-    const email = document.getElementById('customer-email').value.trim();
-    const phone = document.getElementById('customer-phone').value.trim();
+    const pName    = document.getElementById('customer-personal-name').value.trim();
+    const bName    = document.getElementById('customer-business-name').value.trim();
+    const website  = document.getElementById('customer-website').value.trim();
+    const email    = document.getElementById('customer-email').value.trim();
+    const phone    = document.getElementById('customer-phone').value.trim();
 
-    if (!name || !email || !phone) {
-      alert('Vul a.u.b. alle velden (naam, e-mail en telefoon) in om verder te gaan.');
+    if (!pName || !bName || !website || !email || !phone) {
+      alert('Vul a.u.b. alle velden in om verder te gaan.');
       return;
     }
 
@@ -262,7 +264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, customer: { name, email, phone }, utms })
+        body: JSON.stringify({ ...state, customer: { pName, bName, website, email, phone }, utms })
       });
 
       if (!res.ok) throw new Error('Server error');

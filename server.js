@@ -126,7 +126,7 @@ app.post('/api/checkout', async (req, res) => {
     // 1. Create a Mollie Customer
     const mollieClient = await getMollieClient();
     const mollieCustomer = await mollieClient.customers.create({
-      name: customer.name,
+      name: `${customer.pName} (${customer.bName})`,
       email: customer.email,
     });
 
@@ -152,9 +152,11 @@ app.post('/api/checkout', async (req, res) => {
       webhookUrl: `${baseUrl}/api/webhook`, 
       metadata: {
         packageId: package.name,
-        yearlyAmount: amountStr,  // This IS the yearly total (monthly * 12)
+        yearlyAmount: amountStr,
         description: descriptionStr,
-        customerName: customer.name,
+        customerName: customer.pName,
+        businessName: customer.bName,
+        website: customer.website,
         customerEmail: customer.email,
         customerPhone: customer.phone || '',
         modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
@@ -187,8 +189,9 @@ app.post('/api/checkout', async (req, res) => {
           },
           body: JSON.stringify({
             aanmelding_type: "Kiyoh Online Abonnement",
-            bedrijf: customer.name,
-            contactpersoon: customer.name,
+            bedrijf: customer.bName,
+            contactpersoon: customer.pName,
+            website: customer.website || '',
             telefoon: customer.phone || '',
             email: customer.email,
             collega: "Systeem",
@@ -229,8 +232,13 @@ app.post('/api/webhook', async (req, res) => {
 
 
     // If this is a successful payment
+    console.log(`Webhook triggered for Payment ID: ${paymentId}. Status: ${payment.status}`);
+
     if (payment.isPaid()) {
-      const { yearlyAmount, description, customerName, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
+      console.log('Payment PAID. Processing Won lead...');
+      const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
+      
+      console.log(`Lead Info: ${customerName} | ${businessName} | ${customerEmail}`);
 
       // Create subscription ONLY if it was a recurring payment
       if (payment.sequenceType === 'first' && payment.customerId && config.molliePaymentType !== 'once') {
@@ -264,8 +272,9 @@ app.post('/api/webhook', async (req, res) => {
             },
             body: JSON.stringify({
               aanmelding_type: "Kiyoh Online Abonnement",
-              bedrijf: customerName,
+              bedrijf: businessName || customerName,
               contactpersoon: customerName,
+              website: website || '',
               telefoon: customerPhone,
               email: customerEmail,
               collega: "Systeem",
