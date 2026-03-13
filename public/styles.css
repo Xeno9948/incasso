@@ -27,8 +27,8 @@ body {
 }
 
 .journey-wrapper {
-  padding-bottom: 24px; /* Hard bottom buffer for iframe height calculation */
-  min-height: 900px; /* Guarantee iframe calculates a large height on initial render */
+  padding-bottom: 0; 
+  min-height: 400px; 
 }
 
 /* Helper for iframe embedding */
@@ -247,6 +247,7 @@ p { font-size: 0.9rem; color: var(--text-light); }
 /* Core Features Explainer Step 1 */
 .core-features-section {
   margin-top: 60px;
+  margin-bottom: 0;
   background: white;
   border-radius: 20px;
   padding: 40px;
