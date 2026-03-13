@@ -99,253 +99,207 @@
     input:focus, textarea:focus, select:focus { border-color: #f58220; }
     textarea { resize: vertical; min-height: 80px; }
 
-    /* ── Features list editor ── */
-    .features-editor { margin-top: 16px; }
-    .features-editor label { margin-bottom: 8px; display: block; }
-    .feature-row {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
-    }
+    /* ── Features Editor ── */
+    .features-editor { margin-top: 20px; padding-top: 20px; border-top: 1px dashed #eee; }
+    .feature-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .feature-row input { flex: 1; }
     .icon-btn {
-      background: none; border: none; cursor: pointer; padding: 6px 8px;
-      border-radius: 6px; color: #aaa; font-size: 0.9rem; transition: all 0.15s;
+      background: none; border: none; color: #ccc; cursor: pointer; padding: 8px;
+      transition: color 0.2s; font-size: 0.9rem;
     }
-    .icon-btn:hover { background: #fee; color: #e74c3c; }
-    .icon-btn.add { color: #68b03d; }
-    .icon-btn.add:hover { background: rgba(104,176,61,0.1); }
+    .icon-btn:hover { color: #e74c3c; }
     .add-feature-btn {
-      display: flex; align-items: center; gap: 6px; color: #68b03d; font-size: 0.82rem;
-      font-weight: 600; background: none; border: none; cursor: pointer; padding: 4px 0; margin-top: 4px;
+      background: none; border: 1px dashed #ddd; color: #888; padding: 10px;
+      width: 100%; border-radius: 8px; cursor: pointer; font-family: inherit;
+      font-size: 0.8rem; margin-top: 10px; transition: all 0.2s;
     }
-    .add-feature-btn:hover { opacity: 0.8; }
+    .add-feature-btn:hover { border-color: #f58220; color: #f58220; background: rgba(245,130,32,0.02); }
 
-    /* ── Add Item Button ── */
-    .add-item-btn {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      width: 100%; padding: 14px; border: 2px dashed #ddd; border-radius: 14px;
-      background: none; color: #aaa; font-family: inherit; font-weight: 600; font-size: 0.85rem;
-      cursor: pointer; transition: all 0.2s; margin-top: 4px;
-    }
-    .add-item-btn:hover { border-color: #f58220; color: #f58220; }
     .delete-item-btn {
-      display: flex; align-items: center; gap: 6px; color: #e74c3c; font-size: 0.8rem;
-      font-weight: 600; background: none; border: none; cursor: pointer; padding: 4px 0; margin-top: 16px;
+      background: none; border: none; color: #e74c3c; font-size: 0.75rem;
+      font-weight: 600; cursor: pointer; margin-top: 24px; display: flex; align-items: center; gap: 6px;
+      opacity: 0.6; transition: opacity 0.2s;
     }
-    .delete-item-btn:hover { opacity: 0.7; }
+    .delete-item-btn:hover { opacity: 1; }
 
-    /* ── Icon picker ── */
-    .icon-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    /* ── Icon Picker ── */
+    .icon-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px; margin-top: 8px; }
     .icon-opt {
-      width: 36px; height: 36px; border: 2px solid #eee; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center; cursor: pointer;
-      transition: all 0.15s; color: #555;
+      height: 40px; display: flex; align-items: center; justify-content: center;
+      border: 1px solid #eee; border-radius: 8px; cursor: pointer; transition: all 0.2s; color: #666;
     }
     .icon-opt:hover { border-color: #f58220; color: #f58220; }
-    .icon-opt.selected { border-color: #f58220; background: rgba(245,130,32,0.1); color: #f58220; }
+    .icon-opt.selected { background: #f58220; color: white; border-color: #f58220; }
 
-    /* ── Google Ads section ── */
-    .ga-note { background: rgba(245,130,32,0.07); border-left: 3px solid #f58220; border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #555; line-height: 1.6; }
+    /* ── Embed Section ── */
+    .embed-card { background: #1e1e1e; border-radius: 12px; padding: 24px; color: #d4d4d4; }
+    .embed-card textarea {
+      background: #111; border: 1px solid #333; color: #a9dc76;
+      font-family: 'Courier New', monospace; font-size: 0.8rem; width: 100%;
+      height: 280px; padding: 16px; border-radius: 8px; margin-bottom: 16px;
+    }
+    .copy-btn {
+      background: #333; color: white; border: none; padding: 8px 16px;
+      border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.8rem;
+    }
+    .copy-btn:hover { background: #444; }
 
-    /* Buttons */
-    .btn-primary { background: #f58220; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .btn-primary:hover { background: #e0731a; }
+    /* ── Integrity/Checkboxes ── */
+    .checkbox-group { display: flex; flex-direction: column; gap: 10px; background: white; padding: 16px; border-radius: 10px; border: 1px solid #eee; }
+    .checkbox-item { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+    .checkbox-item input { width: 18px; height: 18px; accent-color: #f58220; cursor: pointer; }
   </style>
 </head>
 <body>
 
-<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <h1>🔐 Kiyoh Admin</h1>
-    <p>Voer het beheerderswachtwoord in</p>
-    <div id="login-error">Onjuist wachtwoord. Probeer opnieuw.</div>
-    <input type="password" id="pw-input" placeholder="Wachtwoord" autocomplete="current-password">
-    <button class="btn-primary" style="width:100%" onclick="tryLogin()">Inloggen</button>
+    <div class="topbar-logo" style="font-size: 1.8rem; margin-bottom: 16px;">Kiyoh<span>Admin</span></div>
+    <h1>Inloggen</h1>
+    <p>Voer het wachtwoord in om door te gaan.</p>
+    <div id="login-error">Onjuist wachtwoord.</div>
+    <input type="password" id="pw-input" placeholder="Wachtwoord" autofocus>
+    <button class="save-btn" onclick="tryLogin()" style="width: 100%; justify-content: center; padding: 13px;">Login</button>
   </div>
 </div>
 
-<!-- ADMIN APP -->
 <div id="admin-app">
   <div class="topbar">
-    <div class="topbar-logo">kiyoh <span>admin</span></div>
-    <div style="display:flex;align-items:center;gap:16px;">
-      <span id="save-status"><i class="fas fa-check"></i> Opgeslagen!</span>
-      <button class="save-btn" id="save-btn" onclick="saveConfig()">
-        <i class="fas fa-save"></i> Wijzigingen opslaan
-      </button>
+    <div class="topbar-logo">Kiyoh<span>Admin</span></div>
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <span id="save-status"><i class="fas fa-check"></i> Opgeslagen</span>
+      <button id="save-btn" class="save-btn" onclick="saveConfig()"><i class="fas fa-save"></i> Wijzigingen opslaan</button>
+      <button class="icon-btn" onclick="logout()" title="Uitloggen" style="color:#888;"><i class="fas fa-sign-out-alt"></i></button>
     </div>
   </div>
 
   <div class="main-layout">
-    <nav class="sidebar">
-      <div class="sidebar-nav">
-        <div class="section-label">Content</div>
-        <a href="#" class="active" onclick="showSection('packages', this)"><i class="fas fa-box fa-fw"></i> Pakketten</a>
-        <a href="#" onclick="showSection('modules', this)"><i class="fas fa-puzzle-piece fa-fw"></i> Modules</a>
-        <a href="#" onclick="showSection('features', this)"><i class="fas fa-star fa-fw"></i> Features</a>
-        <div class="section-label">Integraties</div>
-        <div class="section-label">Integraties</div>
-        <a href="#" onclick="showSection('googleads', this)"><i class="fab fa-google fa-fw"></i> Google Ads</a>
-        <a href="#" onclick="showSection('crm', this)"><i class="fas fa-plug fa-fw"></i> CRM Webhook</a>
-        <a href="#" onclick="showSection('mollie', this)"><i class="fas fa-credit-card fa-fw"></i> Mollie Instellingen</a>
-        <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code fa-fw"></i> Iframe Embed</a>
-      </div>
-    </nav>
+    <div class="sidebar">
+      <nav class="sidebar-nav">
+        <div class="section-label">Configuratie</div>
+        <a href="#" class="active" onclick="showSection('packages', this)"><i class="fas fa-box"></i> Pakketten</a>
+        <a href="#" onclick="showSection('modules', this)"><i class="fas fa-puzzle-piece"></i> Modules</a>
+        <a href="#" onclick="showSection('features', this)"><i class="fas fa-star"></i> Core Features</a>
+        
+        <div class="section-label">Integratie</div>
+        <a href="#" onclick="showSection('mollie', this)"><i class="fas fa-credit-card"></i> Mollie</a>
+        <a href="#" onclick="showSection('google', this)"><i class="fas fa-chart-line"></i> Google Ads</a>
+        <a href="#" onclick="showSection('crm', this)"><i class="fas fa-shuttle-space"></i> CRM / Webhook</a>
+        
+        <div class="section-label">Publiceren</div>
+        <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code"></i> Embed Code</a>
+      </nav>
+    </div>
 
     <div class="content">
-
-      <!-- PACKAGES -->
-      <div id="section-packages" class="section active">
+      <!-- Packages -->
+      <section id="section-packages" class="section active">
         <h2>Pakketten</h2>
-        <p class="section-desc">Beheer de 3 abonnementspakketten — naam, prijs, features en populariteitslabel.</p>
+        <p class="section-desc">Beheer de hoofdabonnementen op de tarievenpagina.</p>
         <div id="packages-list"></div>
-        <button class="add-item-btn" onclick="addPackage()"><i class="fas fa-plus"></i> Pakket toevoegen</button>
-      </div>
+        <button class="add-feature-btn" onclick="addPackage()" style="border-style: solid; background: white; color: #1a1a1a; font-weight: 600;">
+          <i class="fas fa-plus"></i> Pakket toevoegen
+        </button>
+      </section>
 
-      <!-- MODULES -->
-      <div id="section-modules" class="section">
-        <h2>Optionele Modules</h2>
-        <p class="section-desc">Beheer de upsell-modules in de sales navigator — naam, prijs, afbeelding en link.</p>
+      <!-- Modules -->
+      <section id="section-modules" class="section">
+        <h2>Extra Modules</h2>
+        <p class="section-desc">Add-ons die klanten kunnen selecteren.</p>
         <div id="modules-list"></div>
-        <button class="add-item-btn" onclick="addModule()"><i class="fas fa-plus"></i> Module toevoegen</button>
-      </div>
+        <button class="add-feature-btn" onclick="addModule()" style="border-style: solid; background: white; color: #1a1a1a; font-weight: 600;">
+          <i class="fas fa-plus"></i> Module toevoegen
+        </button>
+      </section>
 
-      <!-- CORE FEATURES -->
-      <div id="section-features" class="section">
-        <h2>Basisfuncties</h2>
-        <p class="section-desc">Beheer de functies die standaard worden getoond op de tarieven pagina.</p>
+      <!-- Features -->
+      <section id="section-features" class="section">
+        <h2>Core Features</h2>
+        <p class="section-desc">Algemene voordelen onderaan de pagina.</p>
         <div id="features-list"></div>
-        <button class="add-item-btn" onclick="addFeature()"><i class="fas fa-plus"></i> Feature toevoegen</button>
-      </div>
+        <button class="add-feature-btn" onclick="addFeature()" style="border-style: solid; background: white; color: #1a1a1a; font-weight: 600;">
+          <i class="fas fa-plus"></i> Feature toevoegen
+        </button>
+      </section>
 
-      <!-- GOOGLE ADS -->
-      <div id="section-googleads" class="section">
-        <h2>Google Ads Conversies</h2>
-        <p class="section-desc">Configureer Google Ads conversietracking voor nieuwe abonnementen.</p>
-        <div class="ga-note">
-          <strong>Hoe werkt het?</strong><br>
-          Na een succesvolle betaling wordt de klant doorgestuurd naar <code>success.html</code>. Op die pagina wordt automatisch een Google Ads conversie-event gestuurd als je hier een conversie-ID en label invult.
-        </div>
-        <div class="item-card">
-          <div class="item-card-body" style="display:block; padding: 20px;">
-            <div class="field-grid">
-              <div class="field">
-                <label>Conversie-ID <span style="color:#aaa;font-weight:400;">(bijv. AW-123456789)</span></label>
-                <input type="text" id="ga-conversion-id" placeholder="AW-XXXXXXXXX">
-              </div>
-              <div class="field">
-                <label>Conversielabel <span style="color:#aaa;font-weight:400;">(bijv. AbCdEf12345)</span></label>
-                <input type="text" id="ga-conversion-label" placeholder="AbCdEfGhIj">
-              </div>
-              <div class="field full" style="color:#888; font-size:0.8rem; line-height:1.6;">
-                Vind dit in Google Ads → Conversies → je conversiepagina → Snippet. Het formaat is <code>gtag('event', 'conversion', {'send_to': 'AW-ID/LABEL'})</code>.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- CRM WEBHOOK -->
-      <div id="section-crm" class="section">
-        <h2>CRM Webhook Integratie</h2>
-        <p class="section-desc">Voer de URL in van de CRM webhook om leads door te sturen na een succesvolle online aankoop.</p>
-        <div class="item-card">
-          <div class="item-card-body" style="display:block; padding: 20px;">
-            <div class="field-grid">
-              <div class="field full">
-                <label>Webhook URL</label>
-                <input type="url" id="crm-webhook-url" placeholder="https://crm-production-e763.up.railway.app/webhook">
-              </div>
-              <div class="field full" style="color:#888; font-size:0.8rem; line-height:1.6;">
-                Na een succesvolle betaling wordt de leadinformatie gestuurd naar deze webhook, inclusief pakket, modules, omzet en eventuele UTM tags.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MOLLIE SETTINGS -->
-      <div id="section-mollie" class="section">
+      <!-- Mollie -->
+      <section id="section-mollie" class="section">
         <h2>Mollie Instellingen</h2>
-        <p class="section-desc">Beheer hoe betalingen en abonnementen worden verwerkt in Mollie.</p>
-        <div class="item-card">
-          <div class="item-card-body" style="display:block; padding: 20px;">
-            <div class="field-grid">
-              <div class="field">
-                <label>Betaalmethoden</label>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:5px;">
-                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
-                    <input type="checkbox" class="mollie-method-checkbox" value="ideal"> iDEAL
-                  </label>
-                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
-                    <input type="checkbox" class="mollie-method-checkbox" value="creditcard"> Creditcard
-                  </label>
-                  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;">
-                    <input type="checkbox" class="mollie-method-checkbox" value="bancontact"> Bancontact
-                  </label>
-                </div>
-              </div>
-              <div class="field">
-                <label>Facturatie-interval</label>
-                <select id="mollie-interval">
-                  <option value="1 month">Maandelijks</option>
-                  <option value="3 months">Kwartaal</option>
-                  <option value="6 months">Halfjaar</option>
-                  <option value="12 months">Jaarlijks</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Betalingstype</label>
-                <select id="mollie-payment-type">
-                  <option value="recurring">Doorlopend (Abonnement)</option>
-                  <option value="once">Eenmalig</option>
-                </select>
-              </div>
-              <div class="field full">
-                <label>Betaalomschrijving Template</label>
-                <input type="text" id="mollie-description" placeholder="Kiyoh Abonnement: {PACKAGE}">
-                <div style="color:#888; font-size:0.8rem; margin-top:4px;">
-                  Gebruik <code>{PACKAGE}</code> voor de pakketnaam en <code>{LEVEL}</code> voor modules.
-                </div>
-              </div>
+        <p class="section-desc">Configureer hoe betalingen worden verwerkt via Mollie.</p>
+        <div class="field-grid">
+          <div class="field full">
+            <label>Beschikbare Betaalmethoden</label>
+            <div class="checkbox-group">
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="ideal"> iDEAL</label>
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="creditcard"> Creditcard</label>
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="bancontact"> Bancontact</label>
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="sofort"> SOFORT Banking</label>
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="giropay"> Giropay</label>
+              <label class="checkbox-item"><input type="checkbox" class="mollie-method-checkbox" value="applepay"> Apple Pay</label>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- IFRAME EMBED -->
-      <div id="section-embed" class="section">
-        <h2>Website Integratie (Iframe)</h2>
-        <p class="section-desc">Kopieer en plak deze code in je WordPress of HTML website om de tarieven-module te tonen.</p>
-        
-        <div class="item-card">
-          <div class="item-card-body" style="display:block; padding: 20px;">
-            <div class="field-grid">
-              <div class="field full">
-                <label>Embed Code</label>
-                <textarea id="embed-code-textarea" readonly style="font-family: monospace; font-size: 0.85rem; background: #f8f9fa; cursor: pointer; min-height: 120px;" onclick="this.select()"></textarea>
-                <div style="color:#888; font-size:0.8rem; margin-top:8px;">
-                  <i class="fas fa-info-circle"></i> Tip: De bovenstaande code bevat een script dat de hoogte automatisch probeert aan te passen. Mocht de module toch afgekapt worden in WordPress, verhoog dan handmatig de <code>height="1000"</code> pixel waarde in de iframe tag.
-                </div>
-              </div>
-            </div>
+          <div class="field">
+            <label>Interval</label>
+            <select id="mollie-interval">
+              <option value="1 month">Maandelijks</option>
+              <option value="12 months">Jaarlijks</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Type Betaling</label>
+            <select id="mollie-payment-type">
+              <option value="recurring">First + Recurring (Subscription)</option>
+              <option value="one-off">Eenmalig</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>Betalingsomschrijving (Placeholder: {PACKAGE})</label>
+            <input type="text" id="mollie-description">
           </div>
         </div>
-      </div>
+      </section>
 
+      <!-- Google Ads -->
+      <section id="section-google" class="section">
+        <h2>Google Ads Conversies</h2>
+        <p class="section-desc">Track succesvolle aanmeldingen in Google Ads.</p>
+        <div class="field-grid">
+          <div class="field">
+            <label>Conversion ID (AW-XXXX)</label>
+            <input type="text" id="ga-conversion-id" placeholder="AW-123456789">
+          </div>
+          <div class="field">
+            <label>Conversion Label</label>
+            <input type="text" id="ga-conversion-label" placeholder="AbCDEFG123456">
+          </div>
+        </div>
+      </section>
+
+      <!-- CRM -->
+      <section id="section-crm" class="section">
+        <h2>CRM / Webhook</h2>
+        <p class="section-desc">Stuur leadgegevens door naar je CRM via een Webhook URL.</p>
+        <div class="field">
+          <label>Webhook URL</label>
+          <input type="url" id="crm-webhook-url" placeholder="https://hooks.zapier.com/...">
+        </div>
+      </section>
+
+      <!-- Embed -->
+      <section id="section-embed" class="section">
+        <h2>Embed Code</h2>
+        <p class="section-desc">Kopieer deze code naar de pagina waar de tarieven moeten verschijnen.</p>
+        <div class="embed-card">
+          <textarea id="embed-code-textarea" readonly></textarea>
+          <button class="copy-btn" onclick="copyEmbed()"><i class="fas fa-copy"></i> Code kopiëren</button>
+        </div>
+      </section>
     </div>
   </div>
 </div>
 
 <script>
-// ── AVAILABLE ICONS ──────────────────────────────────────────
-const ICONS = [
-  'fas fa-star', 'fas fa-magic', 'fas fa-envelope-open-text', 'fas fa-camera',
-  'fas fa-bullhorn', 'fas fa-columns', 'fas fa-chart-line', 'fas fa-users',
-  'fas fa-shield-alt', 'fas fa-rocket', 'fas fa-cog', 'fas fa-tags',
-  'fas fa-store', 'fas fa-globe', 'fas fa-mobile-alt', 'fas fa-qrcode',
-  'fas fa-link', 'fas fa-thumbs-up', 'fas fa-bell', 'fas fa-search'
-];
+const ICONS = ['fas fa-star', 'fas fa-check-circle', 'fas fa-rocket', 'fas fa-shield-alt', 'fas fa-users', 'fas fa-clock', 'fas fa-cloud', 'fas fa-mobile-alt', 'fas fa-cog', 'fas fa-lock'];
 
 // ── STATE ─────────────────────────────────────────────────────
 let config = { 
@@ -378,7 +332,6 @@ async function tryLogin() {
     return;
   }
 
-  // Load real config
   const configRes = await fetch('/api/config');
   config = await configRes.json();
   if (!config.googleAdsConversionId) config.googleAdsConversionId = '';
@@ -395,16 +348,14 @@ async function tryLogin() {
   renderAll();
 }
 
-// ── NAVIGATION ────────────────────────────────────────────────
 function showSection(name, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
-  el.classList.add('active');
+  if (el) el.classList.add('active');
   return false;
 }
 
-// ── RENDER ALL ────────────────────────────────────────────────
 function renderAll() {
   renderPackages();
   renderModules();
@@ -413,7 +364,6 @@ function renderAll() {
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
   
-  // Set Mollie checkboxes
   const methods = (config.mollieMethods || 'ideal, creditcard, bancontact').split(',').map(m => m.trim());
   document.querySelectorAll('.mollie-method-checkbox').forEach(cb => {
     cb.checked = methods.includes(cb.value);
@@ -423,130 +373,127 @@ function renderAll() {
   document.getElementById('mollie-payment-type').value = config.molliePaymentType || 'recurring';
   document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
   
-  // Set dynamic embed code with FULLSCREEN & REDIRECT support
-  const currentOrigin = "https://payment.kiyoh.com";
+  const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
   if (embedTextarea) {
     const iframeId = "kiyoh-pricing-iframe";
-    embedTextarea.value = `<link rel="preconnect" href="${currentOrigin}">
-<div id="kiyoh-outer-wrapper" style="width:100%; background:#ffffff; overflow:hidden;">
-  <iframe id="${iframeId}" src="about:blank" width="100%" height="0" style="border:none; display:block; margin:0;" scrolling="no" title="Kiyoh Tarieven"></iframe>
-</div>
-<style>
-  .kiyoh-fullscreen {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100% !important;
-    height: 100dvh !important;
-    z-index: 9999999999 !important;
-    background: #fff;
-  }
-</style>
-<script>
-  (function() {
-    var lastH = 0;
-    var iframe = document.getElementById('${iframeId}');
-
-    window.addEventListener('message', function(e) {
-      if (!iframe) return;
-      if (e.data && e.data.type === 'kiyoh-resize') {
-        var newH = e.data.height;
-        if (lastH !== newH) {
-          lastH = newH;
-          iframe.style.height = newH + 'px';
-        }
-      }
-      if (e.data && e.data.type === 'kiyoh-checkout' && e.data.checkoutUrl) {
-        window.location.href = e.data.checkoutUrl;
-      }
-      if (e.data && e.data.type === 'kiyoh-maximize') {
-        iframe.classList.add('kiyoh-fullscreen');
-        document.body.style.overflow = 'hidden';
-      }
-      if (e.data && e.data.type === 'kiyoh-minimize') {
-        iframe.classList.remove('kiyoh-fullscreen');
-        document.body.style.overflow = '';
-      }
-    }, false);
-
-    // Handshake and Src setting for instant load
-    function loadIframe() {
-      if (iframe && iframe.src === 'about:blank') {
-        iframe.src = '${currentOrigin}/';
-        iframe.onload = function() {
-           iframe.contentWindow.postMessage({ type: 'kiyoh-parent-ready' }, '*');
-        };
-      }
-    }
-
-    loadIframe();
-  })();
-</script>`;
+    embedTextarea.value = '<link rel="preconnect" href="' + currentOrigin + '">' + '\n' +
+'<div id="kiyoh-outer-wrapper" style="width:100%; background:#ffffff; overflow:hidden;">' + '\n' +
+'  <iframe id="' + iframeId + '" src="about:blank" width="100%" height="0" style="border:none; display:block; margin:0;" scrolling="no" title="Kiyoh Tarieven"></iframe>' + '\n' +
+'</div>' + '\n' +
+'<style>' + '\n' +
+'  .kiyoh-fullscreen {' + '\n' +
+'    position: fixed !important;' + '\n' +
+'    top: 0 !important;' + '\n' +
+'    left: 0 !important;' + '\n' +
+'    width: 100vw !important;' + '\n' +
+'    height: 100% !important;' + '\n' +
+'    height: 100dvh !important;' + '\n' +
+'    z-index: 9999999999 !important;' + '\n' +
+'    background: #fff;' + '\n' +
+'  }' + '\n' +
+'</style>' + '\n' +
+'<' + 'script>' + '\n' +
+'  (function() {' + '\n' +
+'    var lastH = 0;' + '\n' +
+'    var iframe = document.getElementById(\'' + iframeId + '\');' + '\n' +
+'\n' +
+'    window.addEventListener(\'message\', function(e) {' + '\n' +
+'      if (!iframe) return;' + '\n' +
+'      if (e.data && e.data.type === \'kiyoh-resize\') {' + '\n' +
+'        var newH = e.data.height;' + '\n' +
+'        if (lastH !== newH) {' + '\n' +
+'          lastH = newH;' + '\n' +
+'          iframe.style.height = newH + \'px\';' + '\n' +
+'        }' + '\n' +
+'      }' + '\n' +
+'      if (e.data && e.data.type === \'kiyoh-checkout\' && e.data.checkoutUrl) {' + '\n' +
+'        window.location.href = e.data.checkoutUrl;' + '\n' +
+'      }' + '\n' +
+'      if (e.data && e.data.type === \'kiyoh-maximize\') {' + '\n' +
+'        iframe.classList.add(\'kiyoh-fullscreen\');' + '\n' +
+'        document.body.style.overflow = \'hidden\';' + '\n' +
+'      }' + '\n' +
+'      if (e.data && e.data.type === \'kiyoh-minimize\') {' + '\n' +
+'        iframe.classList.remove(\'kiyoh-fullscreen\');' + '\n' +
+'        document.body.style.overflow = \'\';' + '\n' +
+'      }' + '\n' +
+'    }, false);' + '\n' +
+'\n' +
+'    function loadIframe() {' + '\n' +
+'      if (iframe && iframe.src === \'about:blank\') {' + '\n' +
+'        iframe.src = \'' + currentOrigin + '/\';' + '\n' +
+'        iframe.onload = function() {' + '\n' +
+'           iframe.contentWindow.postMessage({ type: \'kiyoh-parent-ready\' }, \'*\');' + '\n' +
+'        };' + '\n' +
+'      }' + '\n' +
+'    }' + '\n' +
+'    loadIframe();' + '\n' +
+'  })();' + '\n' +
+'<' + '/script>';
   }
 }
 
-// ── PACKAGES ──────────────────────────────────────────────────
 function renderPackages() {
   const container = document.getElementById('packages-list');
   container.innerHTML = '';
   config.packages.forEach((pkg, i) => {
     const card = document.createElement('div');
     card.className = 'item-card';
-    card.innerHTML = `
-      <div class="item-card-header" onclick="toggleCard(this)">
-        <div class="item-card-title">
-          <span>${pkg.name || 'Nieuw pakket'}</span>
-          ${pkg.popular ? '<span class="item-card-badge popular">Meest gekozen</span>' : ''}
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="color:#aaa;font-size:0.85rem;">€${pkg.price}/mnd</span>
-          <i class="fas fa-chevron-down item-card-chevron"></i>
-        </div>
-      </div>
-      <div class="item-card-body">
-        <div class="field-grid">
-          <div class="field">
-            <label>Pakketnaam</label>
-            <input type="text" value="${pkg.name}" oninput="config.packages[${i}].name=this.value; updateCardTitle(this, this.value)">
-          </div>
-          <div class="field">
-            <label>Prijs (€/mnd)</label>
-            <input type="number" value="${pkg.price}" min="0" oninput="config.packages[${i}].price=parseFloat(this.value)||0; updateCardPrice(this, this.value)">
-          </div>
-          <div class="field full">
-            <label>Ondertitel</label>
-            <input type="text" value="${pkg.subtitle}" oninput="config.packages[${i}].subtitle=this.value">
-          </div>
-          <div class="field" style="align-items:flex-start;">
-            <label>Meest gekozen badge</label>
-            <label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-weight:500;">
-              <input type="checkbox" ${pkg.popular ? 'checked' : ''} onchange="config.packages[${i}].popular=this.checked; renderPackages()">
-              Toon "Meest gekozen" badge
-            </label>
-          </div>
-        </div>
-        <div class="features-editor">
-          <label>Inbegrepen features</label>
-          <div id="pkg-features-${i}">
-            ${pkg.features.map((f, fi) => featureRowHtml(`config.packages[${i}].features`, fi, f)).join('')}
-          </div>
-          <button class="add-feature-btn" onclick="addFeatureRow('pkg-features-${i}', config.packages[${i}].features)">
-            <i class="fas fa-plus-circle"></i> Feature toevoegen
-          </button>
-        </div>
-        <button class="delete-item-btn" onclick="deletePackage(${i})"><i class="fas fa-trash"></i> Pakket verwijderen</button>
-      </div>`;
+    card.innerHTML = 
+      '<div class="item-card-header" onclick="toggleCard(this)">' +
+        '<div class="item-card-title">' +
+          '<span>' + (pkg.name || 'Nieuw pakket') + '</span>' +
+          (pkg.popular ? '<span class="item-card-badge popular">Meest gekozen</span>' : '') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span style="color:#aaa;font-size:0.85rem;">€' + pkg.price + '/mnd</span>' +
+          '<i class="fas fa-chevron-down item-card-chevron"></i>' +
+        '</div>' +
+      '</div>' +
+      '<div class="item-card-body">' +
+        '<div class="field-grid">' +
+          '<div class="field">' +
+            '<label>Pakketnaam</label>' +
+            '<input type="text" value="' + pkg.name + '" oninput="config.packages[' + i + '].name=this.value; updateCardTitle(this, this.value)">' +
+          '</div>' +
+          '<div class="field">' +
+            '<label>Prijs (€/mnd)</label>' +
+            '<input type="number" value="' + pkg.price + '" min="0" oninput="config.packages[' + i + '].price=parseFloat(this.value)||0; updateCardPrice(this, this.value)">' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Ondertitel</label>' +
+            '<input type="text" value="' + pkg.subtitle + '" oninput="config.packages[' + i + '].subtitle=this.value">' +
+          '</div>' +
+          '<div class="field" style="align-items:flex-start;">' +
+            '<label>Meest gekozen badge</label>' +
+            '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-weight:500;">' +
+              '<input type="checkbox" ' + (pkg.popular ? 'checked' : '') + ' onchange="config.packages[' + i + '].popular=this.checked; renderPackages()">' +
+              'Toon "Meest gekozen" badge' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        '<div class="features-editor">' +
+          '<label>Inbegrepen features</label>' +
+          '<div id="pkg-features-' + i + '">' +
+            pkg.features.map((f, fi) => featureRowHtml("config.packages[" + i + "].features", fi, f)).join('') +
+          '</div>' +
+          '<button class="add-feature-btn" onclick="addFeatureRow(\'pkg-features-' + i + '\', config.packages[' + i + '].features)">' +
+            '<i class="fas fa-plus-circle"></i> Feature toevoegen' +
+          '</button>' +
+        '</div>' +
+        '<button class="delete-item-btn" onclick="deletePackage(' + i + ')"><i class="fas fa-trash"></i> Pakket verwijderen</button>' +
+      '</div>';
     container.appendChild(card);
   });
 }
 
 function featureRowHtml(arrayRef, index, value) {
-  return `<div class="feature-row" id="fr-${arrayRef.replace(/\W/g,'-')}-${index}">
-    <input type="text" value="${value.replace(/"/g, '&quot;')}" oninput="${arrayRef}[${index}]=this.value">
-    <button class="icon-btn" title="Verwijderen" onclick="deleteFeatureRow('${arrayRef}',${index})"><i class="fas fa-times"></i></button>
-  </div>`;
+  const escValue = value ? value.replace(/"/g, '&quot;') : '';
+  return '<div class="feature-row" id="fr-' + arrayRef.replace(/\W/g,'-') + '-' + index + '">' +
+    '<input type="text" value="' + escValue + '" oninput="' + arrayRef + '[' + index + ']=this.value">' +
+    '<button class="icon-btn" title="Verwijderen" onclick="deleteFeatureRow(\'' + arrayRef + '\',' + index + ')"><i class="fas fa-times"></i></button>' +
+  '</div>';
 }
 
 function addFeatureRow(containerId, featuresArray) {
@@ -580,49 +527,48 @@ function updateCardPrice(el, val) {
   if (priceSpan) priceSpan.textContent = '€' + (parseFloat(val)||0) + '/mnd';
 }
 
-// ── MODULES ───────────────────────────────────────────────────
 function renderModules() {
   const container = document.getElementById('modules-list');
   container.innerHTML = '';
   config.modules.forEach((mod, i) => {
     const card = document.createElement('div');
     card.className = 'item-card';
-    card.innerHTML = `
-      <div class="item-card-header" onclick="toggleCard(this)">
-        <div class="item-card-title">${mod.name || 'Nieuwe module'}</div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="color:#aaa;font-size:0.85rem;">€${mod.price}/mnd</span>
-          <i class="fas fa-chevron-down item-card-chevron"></i>
-        </div>
-      </div>
-      <div class="item-card-body">
-        <div class="field-grid">
-          <div class="field">
-            <label>Naam</label>
-            <input type="text" value="${mod.name}" oninput="config.modules[${i}].name=this.value; updateCardTitle(this, this.value)">
-          </div>
-          <div class="field">
-            <label>Prijs (€/mnd)</label>
-            <input type="number" value="${mod.price}" min="0" oninput="config.modules[${i}].price=parseFloat(this.value)||0; updateCardPrice(this, this.value)">
-          </div>
-          <div class="field full">
-            <label>Beschrijving</label>
-            <textarea oninput="config.modules[${i}].description=this.value">${mod.description}</textarea>
-          </div>
-          <div class="field full">
-            <label>Afbeelding URL</label>
-            <input type="url" value="${mod.image}" oninput="config.modules[${i}].image=this.value; updateImagePreview(this, this.value)" placeholder="https://...">
-          </div>
-          <div class="field full">
-            <label>Link (meer info)</label>
-            <input type="url" value="${mod.link}" oninput="config.modules[${i}].link=this.value" placeholder="https://...">
-          </div>
-        </div>
-        <div class="img-preview-container" style="${mod.image ? 'margin-top:12px;' : 'display:none; margin-top:12px;'}">
-          <img src="${mod.image}" style="height:48px;object-fit:contain;border-radius:6px;background:#f5f5f5;padding:6px;" onerror="this.style.display='none'" onload="this.style.display='block'">
-        </div>
-        <button class="delete-item-btn" onclick="deleteModule(${i})"><i class="fas fa-trash"></i> Module verwijderen</button>
-      </div>`;
+    card.innerHTML = 
+      '<div class="item-card-header" onclick="toggleCard(this)">' +
+        '<div class="item-card-title">' + (mod.name || 'Nieuwe module') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span style="color:#aaa;font-size:0.85rem;">€' + mod.price + '/mnd</span>' +
+          '<i class="fas fa-chevron-down item-card-chevron"></i>' +
+        '</div>' +
+      '</div>' +
+      '<div class="item-card-body">' +
+        '<div class="field-grid">' +
+          '<div class="field">' +
+            '<label>Naam</label>' +
+            '<input type="text" value="' + mod.name + '" oninput="config.modules[' + i + '].name=this.value; updateCardTitle(this, this.value)">' +
+          '</div>' +
+          '<div class="field">' +
+            '<label>Prijs (€/mnd)</label>' +
+            '<input type="number" value="' + mod.price + '" min="0" oninput="config.modules[' + i + '].price=parseFloat(this.value)||0; updateCardPrice(this, this.value)">' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Beschrijving</label>' +
+            '<textarea oninput="config.modules[' + i + '].description=this.value">' + mod.description + '</textarea>' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Afbeelding URL</label>' +
+            '<input type="url" value="' + mod.image + '" oninput="config.modules[' + i + '].image=this.value; updateImagePreview(this, this.value)" placeholder="https://...">' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Link (meer info)</label>' +
+            '<input type="url" value="' + mod.link + '" oninput="config.modules[' + i + '].link=this.value" placeholder="https://...">' +
+          '</div>' +
+        '</div>' +
+        '<div class="img-preview-container" style="' + (mod.image ? 'margin-top:12px;' : 'display:none; margin-top:12px;') + '">' +
+          '<img src="' + mod.image + '" style="height:48px;object-fit:contain;border-radius:6px;background:#f5f5f5;padding:6px;" onerror="this.style.display=\'none\'" onload="this.style.display=\'block\'">' +
+        '</div>' +
+        '<button class="delete-item-btn" onclick="deleteModule(' + i + ')"><i class="fas fa-trash"></i> Module verwijderen</button>' +
+      '</div>';
     container.appendChild(card);
   });
 }
@@ -649,44 +595,43 @@ function updateImagePreview(el, url) {
   }
 }
 
-// ── CORE FEATURES ─────────────────────────────────────────────
 function renderFeatures() {
   const container = document.getElementById('features-list');
   container.innerHTML = '';
   config.coreFeatures.forEach((cf, i) => {
     const card = document.createElement('div');
     card.className = 'item-card';
-    card.innerHTML = `
-      <div class="item-card-header" onclick="toggleCard(this)">
-        <div class="item-card-title">
-          <i class="${cf.icon}" style="color:#f58220;width:18px;text-align:center;"></i>
-          ${cf.title || 'Nieuwe feature'}
-        </div>
-        <i class="fas fa-chevron-down item-card-chevron"></i>
-      </div>
-      <div class="item-card-body">
-        <div class="field-grid">
-          <div class="field">
-            <label>Titel</label>
-            <input type="text" value="${cf.title}" oninput="config.coreFeatures[${i}].title=this.value; updateFeatureTitle(this, this.value)">
-          </div>
-          <div class="field">
-            <label>Link</label>
-            <input type="url" value="${cf.link}" oninput="config.coreFeatures[${i}].link=this.value" placeholder="https://...">
-          </div>
-          <div class="field full">
-            <label>Beschrijving</label>
-            <textarea oninput="config.coreFeatures[${i}].description=this.value">${cf.description}</textarea>
-          </div>
-          <div class="field full">
-            <label>Icoon</label>
-            <div class="icon-options">
-              ${ICONS.map(ic => `<div class="icon-opt ${cf.icon === ic ? 'selected' : ''}" title="${ic}" onclick="selectIcon(${i}, '${ic}', this)"><i class="${ic}"></i></div>`).join('')}
-            </div>
-          </div>
-        </div>
-        <button class="delete-item-btn" onclick="deleteFeature(${i})"><i class="fas fa-trash"></i> Feature verwijderen</button>
-      </div>`;
+    card.innerHTML = 
+      '<div class="item-card-header" onclick="toggleCard(this)">' +
+        '<div class="item-card-title">' +
+          '<i class="' + cf.icon + '" style="color:#f58220;width:18px;text-align:center;"></i>' +
+          (cf.title || 'Nieuwe feature') +
+        '</div>' +
+        '<i class="fas fa-chevron-down item-card-chevron"></i>' +
+      '</div>' +
+      '<div class="item-card-body">' +
+        '<div class="field-grid">' +
+          '<div class="field">' +
+            '<label>Titel</label>' +
+            '<input type="text" value="' + cf.title + '" oninput="config.coreFeatures[' + i + '].title=this.value; updateFeatureTitle(this, this.value)">' +
+          '</div>' +
+          '<div class="field">' +
+            '<label>Link</label>' +
+            '<input type="url" value="' + cf.link + '" oninput="config.coreFeatures[' + i + '].link=this.value" placeholder="https://...">' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Beschrijving</label>' +
+            '<textarea oninput="config.coreFeatures[' + i + '].description=this.value">' + cf.description + '</textarea>' +
+          '</div>' +
+          '<div class="field full">' +
+            '<label>Icoon</label>' +
+            '<div class="icon-options">' +
+              ICONS.map(ic => '<div class="icon-opt ' + (cf.icon === ic ? 'selected' : '') + '" title="' + ic + '" onclick="selectIcon(' + i + ', \'' + ic + '\', this)"><i class="' + ic + '"></i></div>').join('') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="delete-item-btn" onclick="deleteFeature(' + i + ')"><i class="fas fa-trash"></i> Feature verwijderen</button>' +
+      '</div>';
     container.appendChild(card);
   });
 }
@@ -713,23 +658,19 @@ function selectIcon(featureIndex, icon, el) {
   el.classList.add('selected');
 }
 
-// ── CARD TOGGLE ───────────────────────────────────────────────
 function toggleCard(header) {
   header.closest('.item-card').classList.toggle('open');
 }
 
-// ── SAVE ──────────────────────────────────────────────────────
 async function saveConfig() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opslaan…';
 
-  // Pick up Integrations fields
   config.googleAdsConversionId = document.getElementById('ga-conversion-id').value.trim();
   config.googleAdsConversionLabel = document.getElementById('ga-conversion-label').value.trim();
   config.crmWebhookUrl = document.getElementById('crm-webhook-url').value.trim();
   
-  // Collect Mollie methods from checkboxes
   const selectedMethods = [];
   document.querySelectorAll('.mollie-method-checkbox:checked').forEach(cb => selectedMethods.push(cb.value));
   config.mollieMethods = selectedMethods.join(', ');
@@ -754,6 +695,17 @@ async function saveConfig() {
   } else {
     alert('Opslaan mislukt. Controleer de verbinding.');
   }
+}
+
+function copyEmbed() {
+  const textarea = document.getElementById('embed-code-textarea');
+  textarea.select();
+  document.execCommand('copy');
+  alert('Code gekopieerd naar klembord!');
+}
+
+function logout() {
+  window.location.reload();
 }
 </script>
 </body>
