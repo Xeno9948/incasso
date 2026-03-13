@@ -1,0 +1,21 @@
+{
+  "packages": [
+    {
+      "id": "starter",
+      "name": "Starter",
+      "price": 19,
+      "subtitle": "Voor kleine bedrijven",
+      "popular": false,
+      "features": ["Feature 1", "Feature 2"]
+    }
+  ],
+  "modules": [],
+  "coreFeatures": [],
+  "googleAdsConversionId": "",
+  "googleAdsConversionLabel": "",
+  "crmWebhookUrl": "",
+  "mollieMethods": "ideal, creditcard, bancontact",
+  "mollieInterval": "12 months",
+  "molliePaymentType": "recurring",
+  "mollieDescription": "Kiyoh Abonnement: {PACKAGE}"
+}

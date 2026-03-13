@@ -6,3 +6,4 @@ extracted_*.html
 parse_text.py
 pricing_text.txt
 .env
+config.json

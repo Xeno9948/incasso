@@ -4,11 +4,34 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
+const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kiyoh-admin-2024';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Helper to read config with fallback
+function getConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Error reading primary config:', err);
+  }
+  
+  try {
+    if (fs.existsSync(CONFIG_EXAMPLE_PATH)) {
+      console.log('Using example config fallback');
+      return JSON.parse(fs.readFileSync(CONFIG_EXAMPLE_PATH, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Error reading example config:', err);
+  }
+
+  return { packages: [], modules: [], coreFeatures: [] };
+}
 
 // Middleware
 app.use(cors());
@@ -25,12 +48,7 @@ const mollieClient = createMollieClient({ apiKey: mollieApiKey });
 
 // Setup Config API Routes
 app.get('/api/config', (req, res) => {
-  try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    res.json(config);
-  } catch (err) {
-    res.status(500).json({ error: 'Could not read config' });
-  }
+  res.json(getConfig());
 });
 
 app.post('/api/auth', (req, res) => {
@@ -62,7 +80,8 @@ app.post('/api/checkout', async (req, res) => {
     if (utms) utms.user_ip = user_ip;
 
     // Load config for dynamic settings
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const config = getConfig();
+
     const methods = config.mollieMethods ? config.mollieMethods.split(',').map(m => m.trim()) : ['ideal', 'creditcard', 'bancontact'];
     const interval = config.mollieInterval || '12 months';
     let descriptionTemplate = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
@@ -130,7 +149,8 @@ app.post('/api/checkout', async (req, res) => {
     // ─── FIRE CRM WEBHOOK (OPVOLGEN) ──────────────────────────────────
     // Send to CRM immediately so we have the lead even if they abandon Mollie checkout
     try {
-      const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+      const config = getConfig();
+
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       if (crmUrl) {
         console.log('Sending abandoned cart lead to CRM webhook:', crmUrl);
@@ -185,7 +205,8 @@ app.post('/api/webhook', async (req, res) => {
     const payment = await mollieClient.payments.get(paymentId);
     
     // Load config inside webhook to ensure it's not stale
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const config = getConfig();
+
 
     // If this is a successful payment
     if (payment.isPaid()) {
