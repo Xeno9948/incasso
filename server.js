@@ -211,6 +211,10 @@ app.post('/api/checkout', async (req, res) => {
 
     if (modules && modules.length > 0) {
       modules.forEach(m => {
+        // Enforce dynamic pricing for Productreviews (60% of package price)
+        if (m.name === 'Productreviews' || m.id === 'productreviews') {
+          m.price = package.price * 0.6;
+        }
         calculatedTotal += m.price;
         descriptionStr += `, Module: ${m.name}`;
       });

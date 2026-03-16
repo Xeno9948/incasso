@@ -59,27 +59,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ─── RENDER MODULES IN MODAL ──────────────────────────────
-  const modulesGrid = document.getElementById('modules-grid');
-  modulesGrid.innerHTML = '';
-  config.modules.forEach(mod => {
-    const yearly = mod.price * 12;
-    const card = document.createElement('div');
-    card.className = 'premium-module-card';
-    card.setAttribute('data-module', mod.name);
-    card.setAttribute('data-price', mod.price);
-    card.innerHTML = `
-      <div class="pm-image"><img src="${mod.image}" alt="${mod.name}"></div>
-      <div class="pm-content">
-        <h3><a href="${mod.link}" target="_blank" class="feature-link">${mod.name}</a></h3>
-        <p>${mod.description}</p>
-      </div>
-      <div class="pm-price-wrap">
-        <span class="pm-price">€${mod.price}<span>/mnd</span></span>
-        <div class="pm-yearly">Jaarlijks: €${yearly},-</div>
-        <div class="pm-select-btn">Voeg toe</div>
-      </div>`;
-    modulesGrid.appendChild(card);
-  });
+  function renderModulesInModal(packagePrice) {
+    const modulesGrid = document.getElementById('modules-grid');
+    modulesGrid.innerHTML = '';
+    
+    config.modules.forEach(mod => {
+      // Dynamic price for Productreviews: 60% of package price
+      let displayPrice = mod.price;
+      if (mod.name === 'Productreviews' || mod.id === 'productreviews') {
+        displayPrice = packagePrice * 0.6;
+      }
+      
+      const yearly = displayPrice * 12;
+      const card = document.createElement('div');
+      card.className = 'premium-module-card';
+      card.setAttribute('data-module', mod.name);
+      card.setAttribute('data-price', displayPrice);
+      card.innerHTML = `
+        <div class="pm-image"><img src="${mod.image}" alt="${mod.name}"></div>
+        <div class="pm-content">
+          <h3><a href="${mod.link}" target="_blank" class="feature-link">${mod.name}</a></h3>
+          <p>${mod.description}</p>
+        </div>
+        <div class="pm-price-wrap">
+          <span class="pm-price">€${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
+          <div class="pm-yearly">Jaarlijks: €${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
+          <div class="pm-select-btn">Voeg toe</div>
+        </div>`;
+      modulesGrid.appendChild(card);
+    });
+  }
+
+  // Initial render (will be updated when package is selected)
+  renderModulesInModal(state.package.price);
 
   // ─── ELEMENT REFS ─────────────────────────────────────────
   const modal              = document.getElementById('sales-modal');
@@ -156,12 +168,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       price: parseFloat(card.getAttribute('data-price'))
     };
 
-    // Reset modules
+    // Reset selected modules state
     state.modules = [];
-    document.querySelectorAll('.premium-module-card').forEach(mc => {
-      mc.classList.remove('selected');
-      mc.querySelector('.pm-select-btn').textContent = 'Voeg toe';
-    });
+    
+    // Re-render modules in modal with the new package price
+    renderModulesInModal(state.package.price);
 
     step2PackageName.textContent  = state.package.name;
     modalPackageLabel.textContent = state.package.name;
