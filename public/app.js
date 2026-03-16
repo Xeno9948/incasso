@@ -59,8 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ─── RENDER MODULES IN MODAL ──────────────────────────────
+  const modulesGrid = document.getElementById('modules-grid');
+
   function renderModulesInModal(packagePrice) {
-    const modulesGrid = document.getElementById('modules-grid');
     modulesGrid.innerHTML = '';
     
     config.modules.forEach(mod => {
@@ -181,7 +182,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ─── MODULE SELECTION (delegated) ─────────────────────────
-  modulesGrid.addEventListener('click', (e) => {
+  if (modulesGrid) {
+    modulesGrid.addEventListener('click', (e) => {
     if (e.target.tagName.toLowerCase() === 'a') return;
     const card = e.target.closest('.premium-module-card');
     if (!card) return;
