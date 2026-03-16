@@ -345,7 +345,7 @@ app.post('/api/webhook', async (req, res) => {
       if (payment.sequenceType === 'first' && payment.customerId && config.molliePaymentType !== 'once') {
         console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
         
-        await mollieClient.customers_subscriptions.create({
+        await mollieClient.customerSubscriptions.create({
           customerId: payment.customerId,
           amount: {
             currency: 'EUR',
