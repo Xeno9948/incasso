@@ -336,7 +336,7 @@ app.post('/api/webhook', async (req, res) => {
     // If this is a successful payment
     console.log(`Webhook triggered for Payment ID: ${paymentId}. Status: ${payment.status}`);
 
-    if (payment.isPaid()) {
+    if (payment.status === 'paid') {
       console.log('Payment PAID. Processing Won lead...');
       const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
       
