@@ -156,10 +156,19 @@
   <div class="login-box">
     <div class="topbar-logo" style="font-size: 1.8rem; margin-bottom: 16px;">Kiyoh<span>Admin</span></div>
     <h1>Inloggen</h1>
-    <p>Voer het wachtwoord in om door te gaan.</p>
-    <div id="login-error">Onjuist wachtwoord.</div>
-    <input type="password" id="pw-input" placeholder="Wachtwoord" autofocus>
-    <button class="save-btn" onclick="tryLogin()" style="width: 100%; justify-content: center; padding: 13px;">Login</button>
+    <div id="login-step-1">
+      <p>Voer het wachtwoord in om door te gaan.</p>
+      <div id="login-error">Onjuist wachtwoord.</div>
+      <input type="password" id="pw-input" placeholder="Wachtwoord" autofocus>
+      <button class="save-btn" onclick="tryLogin()" style="width: 100%; justify-content: center; padding: 13px;">Doorgaan</button>
+    </div>
+    <div id="login-step-2" style="display: none;">
+      <p>Voer de 2FA code uit je authenticator app in.</p>
+      <div id="2fa-error" style="color: #e74c3c; font-size: 0.8rem; margin-bottom: 10px; display: none;">Onjuiste 2FA code.</div>
+      <input type="text" id="2fa-input" placeholder="000000" maxlength="6" inputmode="numeric">
+      <button class="save-btn" onclick="verify2FA()" style="width: 100%; justify-content: center; padding: 13px;">Login</button>
+      <button class="icon-btn" onclick="resetLogin()" style="font-size: 0.75rem; margin-top: 10px;">Terug naar wachtwoord</button>
+    </div>
   </div>
 </div>
 
@@ -185,6 +194,7 @@
         <a href="#" onclick="showSection('mollie', this)"><i class="fas fa-credit-card"></i> Mollie</a>
         <a href="#" onclick="showSection('google', this)"><i class="fas fa-chart-line"></i> Google Ads</a>
         <a href="#" onclick="showSection('crm', this)"><i class="fas fa-shuttle-space"></i> CRM / Webhook</a>
+        <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
         
         <div class="section-label">Publiceren</div>
         <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code"></i> Embed Code</a>
@@ -302,13 +312,49 @@
         </div>
       </section>
 
-      <!-- Embed -->
-      <section id="section-embed" class="section">
-        <h2>Embed Code</h2>
-        <p class="section-desc">Kopieer deze code naar de pagina waar de tarieven moeten verschijnen.</p>
-        <div class="embed-card">
-          <textarea id="embed-code-textarea" readonly></textarea>
-          <button class="copy-btn" onclick="copyEmbed()"><i class="fas fa-copy"></i> Code kopiëren</button>
+      <!-- Security -->
+      <section id="section-security" class="section">
+        <h2>Beveiliging (2FA)</h2>
+        <p class="section-desc">Beveilig je account met Tweestapsverificatie (Authenticator app).</p>
+        
+        <div id="2fa-status-card" class="item-card open" style="margin-bottom: 24px;">
+           <div class="item-card-body" style="padding: 20px; display: block;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                 <div style="display: flex; align-items: center; gap: 15px;">
+                    <div id="cfg-2fa-status-icon" style="width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                       <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div>
+                       <strong id="cfg-2fa-status-text" style="display: block; font-size: 1.1rem;">2FA staat uit</strong>
+                       <span id="cfg-2fa-status-desc" style="font-size: 0.85rem; color: #888;">Niet aanbevolen. Activeer 2FA voor optimale beveiliging.</span>
+                    </div>
+                 </div>
+                 <button id="cfg-2fa-toggle-btn" class="save-btn" style="background: #68b03d; border: none;" onclick="start2FASetup()">Nu inschakelen</button>
+              </div>
+           </div>
+        </div>
+
+        <div id="2fa-setup-panel" class="item-card" style="display: none;">
+           <div class="item-card-body" style="padding: 24px; display: block;">
+              <h3>2FA Instellen</h3>
+              <p style="margin: 10px 0 20px; font-size: 0.85rem; color: #555;">Scan de onderstaande QR-code met je authenticator app (zoals Google Authenticator of Authy) om de koppeling te maken.</p>
+              
+              <div style="text-align: center; margin-bottom: 24px;">
+                 <img id="2fa-qr-img" style="width: 200px; height: 200px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;">
+                 <div id="2fa-secret-text" style="font-family: monospace; font-size: 0.85rem; color: #888; margin-top: 10px; display: none;">Secret: <span id="2fa-secret-val"></span></div>
+              </div>
+
+              <div class="field">
+                 <label>Verificatiecode</label>
+                 <div style="display: flex; gap: 10px;">
+                    <input type="text" id="2fa-setup-input" placeholder="000 000" maxlength="7">
+                    <button class="save-btn" onclick="confirm2FASetup()">Bevestigen</button>
+                 </div>
+                 <p style="font-size: 0.75rem; color: #888; margin-top: 8px;">Typ de 6-cijferige code uit de app om te controleren of de koppeling werkt.</p>
+              </div>
+              
+              <button class="icon-btn" onclick="cancel2FASetup()" style="margin-top: 20px; font-size: 0.8rem;">Annuleren</button>
+           </div>
         </div>
       </section>
     </div>
@@ -352,8 +398,59 @@ async function tryLogin() {
     return;
   }
 
-  const configRes = await fetch('/api/config');
+  const result = await res.json();
+  password = pw;
+
+  if (result.twoFactorRequired) {
+    document.getElementById('login-step-1').style.display = 'none';
+    document.getElementById('login-step-2').style.display = 'block';
+    document.getElementById('2fa-input').focus();
+    return;
+  }
+
+  completeLogin();
+}
+
+async function verify2FA() {
+  const code = document.getElementById('2fa-input').value;
+  const res = await fetch('/api/auth/2fa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, code })
+  });
+
+  if (!res.ok) {
+    const errorMsg = document.getElementById('2fa-error');
+    errorMsg.style.display = 'block';
+    return;
+  }
+
+  completeLogin();
+}
+
+function resetLogin() {
+  document.getElementById('login-step-1').style.display = 'block';
+  document.getElementById('login-step-2').style.display = 'none';
+  document.getElementById('2fa-input').value = '';
+}
+
+async function completeLogin() {
+  const configRes = await fetch('/api/config', {
+    headers: { 'Authorization': password }
+  });
+  if (!configRes.ok) {
+    alert('Failed to load configuration.');
+    return;
+  }
   config = await configRes.json();
+  renderConfigInit();
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-app').style.display = 'block';
+  renderAll();
+}
+
+function renderConfigInit() {
   if (!config.googleAdsConversionId) config.googleAdsConversionId = '';
   if (!config.googleAdsConversionLabel) config.googleAdsConversionLabel = '';
   if (!config.crmWebhookUrl) config.crmWebhookUrl = '';
@@ -364,11 +461,6 @@ async function tryLogin() {
   if (config.mollieTestMode === undefined) config.mollieTestMode = true;
   if (!config.mollieLiveKey) config.mollieLiveKey = '';
   if (!config.mollieTestKey) config.mollieTestKey = '';
-
-  password = pw;
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('admin-app').style.display = 'block';
-  renderAll();
 }
 
 function showSection(name, el) {
@@ -398,6 +490,8 @@ function renderAll() {
   document.getElementById('mollie-test-mode').checked = !!config.mollieTestMode;
   document.getElementById('mollie-live-key').value = config.mollieLiveKey || '';
   document.getElementById('mollie-test-key').value = config.mollieTestKey || '';
+  
+  render2FAStatus();
   
   const currentOrigin = window.location.origin;
   const embedTextarea = document.getElementById('embed-code-textarea');
@@ -710,8 +804,11 @@ async function saveConfig() {
 
   const res = await fetch('/api/config', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...config, password })
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': password
+    },
+    body: JSON.stringify({ ...config })
   });
 
   btn.disabled = false;
@@ -735,6 +832,90 @@ function copyEmbed() {
 
 function logout() {
   window.location.reload();
+}
+
+// ── 2FA MANAGEMENT ───────────────────────────────────────────
+let temp2FASecret = null;
+
+function render2FAStatus() {
+   const isEnabled = !!config.twoFactorEnabled;
+   const icon = document.getElementById('cfg-2fa-status-icon');
+   const text = document.getElementById('cfg-2fa-status-text');
+   const desc = document.getElementById('cfg-2fa-status-desc');
+   const btn = document.getElementById('cfg-2fa-toggle-btn');
+
+   if (isEnabled) {
+      icon.style.background = 'rgba(104,176,61,0.12)';
+      icon.style.color = '#68b03d';
+      text.textContent = '2FA staat aan';
+      desc.textContent = 'Je account is extra beveiligd door tweestapsverificatie.';
+      btn.textContent = 'Uitschakelen';
+      btn.style.background = '#e74c3c';
+      btn.onclick = disable2FA;
+   } else {
+      icon.style.background = 'rgba(231,76,60,0.12)';
+      icon.style.color = '#e74c3c';
+      text.textContent = '2FA staat uit';
+      desc.textContent = 'Niet aanbevolen. Activeer 2FA voor optimale beveiliging.';
+      btn.textContent = 'Nu inschakelen';
+      btn.style.background = '#68b03d';
+      btn.onclick = start2FASetup;
+   }
+}
+
+async function start2FASetup() {
+   const res = await fetch('/api/2fa/setup', {
+      headers: { 'Authorization': password }
+   });
+   const data = await res.json();
+   
+   temp2FASecret = data.secret;
+   document.getElementById('2fa-qr-img').src = data.qrCodeUrl;
+   document.getElementById('2fa-secret-val').textContent = data.secret;
+   
+   document.getElementById('2fa-status-card').style.display = 'none';
+   document.getElementById('2fa-setup-panel').style.display = 'block';
+}
+
+function cancel2FASetup() {
+   document.getElementById('2fa-status-card').style.display = 'block';
+   document.getElementById('2fa-setup-panel').style.display = 'none';
+}
+
+async function confirm2FASetup() {
+   const code = document.getElementById('2fa-setup-input').value.replace(/\s/g, '');
+   const res = await fetch('/api/2fa/verify', {
+      method: 'POST',
+      headers: { 
+         'Content-Type': 'application/json',
+         'Authorization': password
+      },
+      body: JSON.stringify({ secret: temp2FASecret, code })
+   });
+
+   if (res.ok) {
+      config.twoFactorEnabled = true;
+      cancel2FASetup();
+      render2FAStatus();
+      alert('2FA succesvol ingeschakeld!');
+   } else {
+      alert('Ongeldige code. Probeer het opnieuw.');
+   }
+}
+
+async function disable2FA() {
+   if (!confirm('Weet je zeker dat je 2FA wilt uitschakelen? Dit maakt je account minder veilig.')) return;
+   
+   const res = await fetch('/api/2fa/disable', {
+      method: 'POST',
+      headers: { 'Authorization': password }
+   });
+
+   if (res.ok) {
+      config.twoFactorEnabled = false;
+      render2FAStatus();
+      alert('2FA is uitgeschakeld.');
+   }
 }
 </script>
 </body>

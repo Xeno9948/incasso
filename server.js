@@ -4,6 +4,13 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const db = require('./db');
+const { rateLimit } = require('express-rate-limit');
+const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
+const authenticator = new TOTP({
+  crypto: new NobleCryptoPlugin(),
+  base32: new ScureBase32Plugin()
+});
+const QRCode = require('qrcode');
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
@@ -40,6 +47,24 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Rate Limiting for sensitive routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per window
+  message: { error: 'Too many requests, please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Authentication Middleware
+const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
 // Helper to get Mollie Client dynamically
 async function getMollieClient() {
   const config = await getConfig();
@@ -59,21 +84,93 @@ async function getMollieClient() {
 }
 
 // Setup Config API Routes
-app.get('/api/config', async (req, res) => {
+app.get('/api/config', authMiddleware, async (req, res) => {
   res.json(await getConfig());
 });
 
-app.post('/api/auth', (req, res) => {
+app.post('/api/auth', authLimiter, async (req, res) => {
   const { password } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+  
+  const config = await getConfig();
+  if (config.twoFactorEnabled && config.twoFactorSecret) {
+    return res.json({ ok: true, twoFactorRequired: true });
+  }
+  
+  res.json({ ok: true, twoFactorRequired: false });
+});
+
+app.post('/api/auth/2fa', authLimiter, async (req, res) => {
+  const { password, code } = req.body;
+  if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+  
+  const config = await getConfig();
+  if (!config.twoFactorEnabled || !config.twoFactorSecret) {
+    return res.status(400).json({ error: '2FA not enabled' });
+  }
+  
+  const isValid = await authenticator.verify(code, {
+    secret: config.twoFactorSecret
+  });
+  
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid 2FA code' });
+  }
+  
   res.json({ ok: true });
 });
 
-app.post('/api/config', async (req, res) => {
-  const { password, ...config } = req.body;
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Unauthorized' });
+app.get('/api/2fa/setup', authMiddleware, async (req, res) => {
+  const secret = authenticator.generateSecret();
+  const otpauth = authenticator.toURI({ label: 'Admin', issuer: 'Kiyoh-Pricing', secret });
+  
+  try {
+    const qrCodeUrl = await QRCode.toDataURL(otpauth);
+    res.json({ secret, qrCodeUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate QR code' });
   }
+});
+
+app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
+  const { secret, code } = req.body;
+  const isValid = await authenticator.verify(code, { secret });
+  
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid code' });
+  }
+  
+  const config = await getConfig();
+  config.twoFactorSecret = secret;
+  config.twoFactorEnabled = true;
+  
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    await db.saveSettings(config);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+app.post('/api/2fa/disable', authMiddleware, async (req, res) => {
+  const config = await getConfig();
+  config.twoFactorEnabled = false;
+  config.twoFactorSecret = null;
+  
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    await db.saveSettings(config);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+app.post('/api/config', authLimiter, authMiddleware, async (req, res) => {
+  const { password, ...config } = req.body;
+  // password in body is now optional since it's checked in header, 
+  // but we keep it for backward compatibility if needed, though middleware already checked headers.
   try {
     // 1. Save to local file (for local dev/backups)
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));

@@ -147,5 +147,7 @@
   "googleAdsConversionLabel": "",
   "mollieTestMode": true,
   "mollieLiveKey": "",
-  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD"
+  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD",
+  "twoFactorSecret": null,
+  "twoFactorEnabled": false
 }
