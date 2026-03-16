@@ -346,16 +346,36 @@ app.post('/api/webhook', async (req, res) => {
       if (payment.sequenceType === 'first' && payment.customerId && config.molliePaymentType !== 'once') {
         console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
         
+        // Calculate the start date for the next billing cycle (defaulting to 12 months for yearly plans)
+        const interval = config.mollieInterval || '12 months';
+        let startDate = new Date();
+        
+        if (interval.includes('months')) {
+          const months = parseInt(interval);
+          startDate.setMonth(startDate.getMonth() + months);
+        } else if (interval.includes('days')) {
+          const days = parseInt(interval);
+          startDate.setDate(startDate.getDate() + days);
+        } else if (interval.includes('weeks')) {
+          const weeks = parseInt(interval);
+          startDate.setDate(startDate.getDate() + (weeks * 7));
+        }
+
+        const startDateStr = startDate.toISOString().split('T')[0];
+        console.log(`Subscription interval: ${interval}. First payment paid. Next billing date set to: ${startDateStr}`);
+
         await mollieClient.customerSubscriptions.create({
           customerId: payment.customerId,
           amount: {
             currency: 'EUR',
             value: yearlyAmount,
           },
-          interval: config.mollieInterval || '12 months',
-          description: payment.description || description,
+          interval: interval,
+          startDate: startDateStr, // Start the automated billing after the initial period
+          description: `Abonnement verlenging: ${packageId || 'Service'}`,
+          metadata: payment.metadata
         });
-        console.log(`Subscription created successfully for Customer ${payment.customerId}!`);
+        console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
       }
 
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
