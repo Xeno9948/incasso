@@ -84,7 +84,7 @@ async function getMollieClient() {
 }
 
 // Setup Config API Routes
-app.get('/api/config', authMiddleware, async (req, res) => {
+app.get('/api/config', async (req, res) => {
   res.json(await getConfig());
 });
 
