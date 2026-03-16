@@ -203,6 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateTotalPreview();
   });
+}
 
   // ─── TOTAL PREVIEW ────────────────────────────────────────
   function updateTotalPreview() {
