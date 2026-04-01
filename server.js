@@ -2,7 +2,6 @@ const express = require('express');
 const { createMollieClient } = require('@mollie/api-client');
 const cors = require('cors');
 const QRCode = require('qrcode');
-const { loadSettings, saveSettings } = require('./db');
 const exact = require('./exact');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
@@ -10,7 +9,11 @@ const authenticator = new TOTP({
   crypto: new NobleCryptoPlugin(),
   base32: new ScureBase32Plugin()
 });
-const QRCode = require('qrcode');
+
+const fs = require('fs');
+const path = require('path');
+const db = require('./db');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
