@@ -82,6 +82,7 @@
     .item-card-title { font-weight: 600; display: flex; align-items: center; gap: 10px; }
     .item-card-badge { background: #f0f0f0; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; color: #666; }
     .item-card-badge.popular { background: rgba(104,176,61,0.12); color: #68b03d; }
+    .item-card-badge.offline { background: rgba(231,76,60,0.12); color: #e74c3c; }
     .item-card-body { padding: 0 20px 20px; border-top: 1px solid #f5f5f5; display: none; }
     .item-card.open .item-card-body { display: block; }
     .item-card-chevron { color: #bbb; transition: transform 0.2s; }
@@ -195,6 +196,9 @@
         <a href="#" onclick="showSection('google', this)"><i class="fas fa-chart-line"></i> Google Ads</a>
         <a href="#" onclick="showSection('crm', this)"><i class="fas fa-shuttle-space"></i> CRM / Webhook</a>
         <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
+        
+        <div class="section-label">Overzicht</div>
+        <a href="#" onclick="showSection('subscribers', this)"><i class="fas fa-users"></i> Abonnementen</a>
         
         <div class="section-label">Publiceren</div>
         <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code"></i> Embed Code</a>
@@ -358,6 +362,32 @@
         </div>
       </section>
 
+      <!-- Subscribers -->
+      <section id="section-subscribers" class="section">
+        <h2>Abonnementen</h2>
+        <p class="section-desc">Lijst van alle actieve abonnementen via Mollie.</p>
+        
+        <div class="item-card open">
+          <div class="item-card-body" style="padding: 0; display: block;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="background: #fafafa; border-bottom: 2px solid #eee; text-align: left;">
+                  <th style="padding: 12px 20px;">Klant</th>
+                  <th style="padding: 12px 20px;">Pakket</th>
+                  <th style="padding: 12px 20px;">Bedrag</th>
+                  <th style="padding: 12px 20px;">Volgende Betaling</th>
+                  <th style="padding: 12px 20px;">Status</th>
+                  <th style="padding: 12px 20px;">Actie</th>
+                </tr>
+              </thead>
+              <tbody id="subscribers-table-body">
+                <tr><td colspan="6" style="padding: 40px; text-align: center; color: #888;"><i class="fas fa-spinner fa-spin"></i> Abonnementen laden...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Embed Code -->
       <section id="section-embed" class="section">
         <h2>Embed Code</h2>
@@ -478,7 +508,75 @@ function showSection(name, el) {
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   if (el) el.classList.add('active');
+  
+  if (name === 'subscribers') {
+    fetchSubscribers();
+  }
   return false;
+}
+
+async function fetchSubscribers() {
+  const tbody = document.getElementById('subscribers-table-body');
+  try {
+    const res = await fetch('/api/subscribers', {
+      headers: { 'Authorization': password }
+    });
+    if (!res.ok) throw new Error('Failed to fetch');
+    const subs = await res.json();
+    
+    if (subs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #888;">Geen abonnementen gevonden.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = subs.map(sub => `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 12px 20px;">
+          <strong style="display:block;">${sub.customerName}</strong>
+          <span style="font-size:0.75rem; color:#888;">${sub.customerEmail}</span>
+        </td>
+        <td style="padding: 12px 20px;">${sub.description || 'Service'}</td>
+        <td style="padding: 12px 20px;">€${sub.amount.value}</td>
+        <td style="padding: 12px 20px;">${sub.nextPaymentDate || 'Binnenkort'}</td>
+        <td style="padding: 12px 20px;">
+          <span class="item-card-badge ${sub.status === 'active' ? 'popular' : ''}">${sub.status}</span>
+        </td>
+        <td style="padding: 12px 20px;">
+          ${sub.status === 'active' ? `
+            <button onclick="cancelSubscription('${sub.customerId}', '${sub.id}')" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-weight: 600; font-size: 0.75rem;">
+              <i class="fas fa-times"></i> Zeg op
+            </button>
+          ` : '-'}
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #e74c3c;">Fout bij laden van abonnementen.</td></tr>';
+  }
+}
+
+async function cancelSubscription(customerId, subId) {
+  if (!confirm('Weet je zeker dat je dit abonnement wilt opzeggen?')) return;
+  
+  try {
+    const res = await fetch('/api/subscribers/cancel', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': password
+      },
+      body: JSON.stringify({ customerId, subscriptionId: subId })
+    });
+    
+    if (res.ok) {
+      alert('Abonnement succesvol opgezegd.');
+      fetchSubscribers();
+    } else {
+      alert('Opzeggen mislukt.');
+    }
+  } catch (err) {
+    alert('Fout bij maken van verbinding.');
+  }
 }
 
 function renderAll() {
@@ -575,6 +673,7 @@ function renderPackages() {
         '<div class="item-card-title">' +
           '<span>' + (pkg.name || 'Nieuw pakket') + '</span>' +
           (pkg.popular ? '<span class="item-card-badge popular">Meest gekozen</span>' : '') +
+          (pkg.offline ? '<span class="item-card-badge offline">Offline</span>' : '') +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;">' +
           '<span style="color:#aaa;font-size:0.85rem;">€' + pkg.price + '/mnd</span>' +
@@ -600,6 +699,13 @@ function renderPackages() {
             '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-weight:500;">' +
               '<input type="checkbox" ' + (pkg.popular ? 'checked' : '') + ' onchange="config.packages[' + i + '].popular=this.checked; renderPackages()">' +
               'Toon "Meest gekozen" badge' +
+            '</label>' +
+          '</div>' +
+          '<div class="field" style="align-items:flex-start;">' +
+            '<label>Status</label>' +
+            '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-weight:500;">' +
+              '<input type="checkbox" ' + (pkg.offline ? 'checked' : '') + ' onchange="config.packages[' + i + '].offline=this.checked; renderPackages()">' +
+              'Pakket offline halen (verbergen)' +
             '</label>' +
           '</div>' +
         '</div>' +
@@ -665,7 +771,10 @@ function renderModules() {
     card.className = 'item-card';
     card.innerHTML = 
       '<div class="item-card-header" onclick="toggleCard(this)">' +
-        '<div class="item-card-title">' + (mod.name || 'Nieuwe module') + '</div>' +
+        '<div class="item-card-title">' + 
+          '<span>' + (mod.name || 'Nieuwe module') + '</span>' + 
+          (mod.offline ? '<span class="item-card-badge offline" style="margin-left:10px;">Offline</span>' : '') +
+        '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;">' +
           '<span style="color:#aaa;font-size:0.85rem;">€' + mod.price + '/mnd</span>' +
           '<i class="fas fa-chevron-down item-card-chevron"></i>' +
@@ -692,6 +801,12 @@ function renderModules() {
           '<div class="field full">' +
             '<label>Link (meer info)</label>' +
             '<input type="url" value="' + mod.link + '" oninput="config.modules[' + i + '].link=this.value" placeholder="https://...">' +
+          '</div>' +
+          '<div class="field full" style="align-items:flex-start; margin-top: 10px;">' +
+            '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer;">' +
+              '<input type="checkbox" ' + (mod.offline ? 'checked' : '') + ' onchange="config.modules[' + i + '].offline=this.checked; renderModules()">' +
+              'Module offline halen (verbergen)' +
+            '</label>' +
           '</div>' +
         '</div>' +
         '<div class="img-preview-container" style="' + (mod.image ? 'margin-top:12px;' : 'display:none; margin-top:12px;') + '">' +

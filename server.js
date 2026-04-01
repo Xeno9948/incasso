@@ -1,9 +1,9 @@
 const express = require('express');
 const { createMollieClient } = require('@mollie/api-client');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const db = require('./db');
+const QRCode = require('qrcode');
+const { loadSettings, saveSettings } = require('./db');
+const exact = require('./exact');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
 const authenticator = new TOTP({
@@ -416,6 +416,19 @@ app.post('/api/webhook', async (req, res) => {
           console.error('Failed to send CRM webhook:', err);
         }
       }
+
+      // ─── FIRE EXACT ONLINE RELATION CREATION (NEW CUSTOMERS) ──────────
+      // If invoice_id is empty, it's a new customer paying via the pricing page
+      if (!payment.metadata.invoice_id) {
+        console.log('New customer detected. Triggering Exact Online Relation creation...');
+        try {
+          await exact.createRelation(payment.metadata);
+          console.log('Exact Online Relation created successfully!');
+        } catch (err) {
+          console.error('Failed to create Exact Online Relation:', err.message);
+          // We don't fail the whole webhook if Exact fails, just log it
+        }
+      }
     }
 
     res.status(200).send('OK');
@@ -425,8 +438,175 @@ app.post('/api/webhook', async (req, res) => {
   }
 });
 
+// --- SUBSCRIBER MANAGEMENT API ---
+app.get('/api/subscribers', authMiddleware, async (req, res) => {
+  try {
+    const mollieClient = await getMollieClient();
+    
+    // 1. Get recent subscriptions
+    const subscriptions = await mollieClient.subscription.page({ limit: 50 });
+    
+    // 2. Fetch customer details for each (to get names)
+    // Note: In a production app you'd want to cache or optimize this
+    const enrichedSubs = await Promise.all(subscriptions.map(async (sub) => {
+      try {
+        const customer = await mollieClient.customers.get(sub.customerId);
+        return {
+          ...sub,
+          customerName: customer.name,
+          customerEmail: customer.email
+        };
+      } catch (err) {
+        return { ...sub, customerName: 'Onbekende klant', customerEmail: '' };
+      }
+    }));
+
+    res.json(enrichedSubs);
+  } catch (error) {
+    console.error('Failed to fetch subscribers:', error);
+    res.status(500).json({ error: 'Mollie API Error' });
+  }
+});
+
+app.post('/api/subscribers/cancel', authMiddleware, async (req, res) => {
+  try {
+    const { customerId, subscriptionId } = req.body;
+    if (!customerId || !subscriptionId) {
+      return res.status(400).json({ error: 'Missing customerId or subscriptionId' });
+    }
+
+    const mollieClient = await getMollieClient();
+    // Correct signature: cancel(subscriptionId, { customerId })
+    await mollieClient.customerSubscriptions.cancel(subscriptionId, { customerId });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to cancel subscription:', error);
+    res.status(500).json({ error: 'Mollie API Error', details: error.message });
+  }
+});
+
+// ─── EXACT ONLINE TO MOLLIE BRIDGE (v2) ─────────────────────────────
+// Landing page for links from Exact Online invoices
+app.get('/pay-invoice', async (req, res) => {
+  try {
+    const { invoice_id, amount, email, package: packageId } = req.query;
+    
+    if (!invoice_id || !amount || !email) {
+      return res.status(400).send('<h1>Foutieve link</h1><p>Ontbrekende gegevens in de link (factuurnummer, bedrag of email).</p>');
+    }
+
+    const mollieClient = await getMollieClient();
+    
+    // 1. Create a Mollie Customer (consistent with the app's standard checkout pattern)
+    const customer = await mollieClient.customers.create({
+      name: email, 
+      email: email
+    });
+
+
+    // 2. Prepare redirect URLs
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const baseUrl = `${protocol}://${req.headers.host}`;
+
+    // 3. Create FIRST payment to capture the mandate
+    const payment = await mollieClient.payments.create({
+      amount: {
+        value: parseFloat(amount).toFixed(2),
+        currency: 'EUR'
+      },
+      customerId: customer.id,
+      sequenceType: 'first',
+      description: invoice_id, // Reconciliation key for Exact
+      redirectUrl: `${baseUrl}/success.html`,
+      cancelUrl: `${baseUrl}/cancel.html`,
+      webhookUrl: `${baseUrl}/api/webhook`,
+      metadata: {
+        invoice_id,
+        packageId: packageId || 'Pakket',
+        yearlyAmount: parseFloat(amount).toFixed(2),
+        customerEmail: email,
+        customerName: email,
+        description: `Factuur ${invoice_id}`
+      }
+    });
+
+    res.redirect(payment.getCheckoutUrl());
+  } catch (error) {
+    console.error('Exact Bridge Error:', error);
+    res.status(500).send('<h1>Systeemfout</h1><p>Er is een fout opgetreden bij het verwerken van de betaling.</p>');
+  }
+});
+
+/**
+ * Endpoint to generate a QR code image for a specific invoice.
+ * Example: /api/qr/invoice?invoice_id=INV123&amount=100.00&email=test@test.com
+ */
+app.get('/api/qr/invoice', async (req, res) => {
+  try {
+    const { invoice_id, amount, email } = req.query;
+    
+    if (!invoice_id || !amount || !email) {
+      return res.status(400).send('Invalid parameters');
+    }
+
+    // Construct the payment URL (Bridge v2)
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const baseUrl = `${protocol}://${req.headers.host}`;
+    const paymentUrl = `${baseUrl}/pay-invoice?invoice_id=${encodeURIComponent(invoice_id)}&amount=${encodeURIComponent(amount)}&email=${encodeURIComponent(email)}`;
+
+    // Generate QR Code as a Buffer
+    const qrBuffer = await QRCode.toBuffer(paymentUrl, {
+      type: 'png',
+      margin: 1,
+      width: 300,
+      color: {
+        dark: '#1a1a1a',
+        light: '#ffffff'
+      }
+    });
+
+    res.setHeader('Content-Type', 'image/png');
+    res.send(qrBuffer);
+  } catch (err) {
+    console.error('QR Gen Error:', err);
+    res.status(500).send('Error generating QR code');
+  }
+});
+
+/**
+ * EXACT ONLINE OAUTH2 ROUTES
+ */
+
+app.get('/api/exact/auth', (req, res) => {
+  const url = exact.getAuthUrl();
+  if (!url) {
+    return res.status(500).send('EXACT_CLIENT_ID is not configured in environment variables');
+  }
+  res.redirect(url);
+});
+
+app.get('/api/exact/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).send('No code provided');
+
+  try {
+    const tokens = await exact.getTokensFromCode(code);
+    const config = await loadSettings({});
+    config.exactToken = tokens;
+    await saveSettings(config);
+    res.send('<h1>Exact Online gekoppeld!</h1><p>Je kunt dit venster nu sluiten.</p>');
+  } catch (err) {
+    console.error('Exact Callback Error:', err.response ? err.response.data : err.message);
+    res.status(500).send('Fout bij het koppelen van Exact Online');
+  }
+});
+
+
+
 // Start Server
 app.listen(port, () => {
   console.log(`Server draait op http://localhost:${port}`);
   console.log('Open your browser and navigate to http://localhost:3000 om de tarieven pagina te zien.');
 });
+

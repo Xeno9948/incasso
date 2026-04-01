@@ -10,15 +10,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ─── STATE ───────────────────────────────────────────────
+  const onlinePackages = config.packages.filter(p => !p.offline);
+  const onlineModules = config.modules.filter(m => !m.offline);
+
   let state = {
-    package: config.packages[0] ? { name: config.packages[0].name, price: config.packages[0].price } : { name: '', price: 0 },
+    package: onlinePackages[0] ? { name: onlinePackages[0].name, price: onlinePackages[0].price } : { name: '', price: 0 },
     modules: []
   };
 
   // ─── RENDER PRICING CARDS ─────────────────────────────────
   const pricingGrid = document.getElementById('pricing-grid');
   pricingGrid.innerHTML = '';
-  config.packages.forEach((pkg, i) => {
+  onlinePackages.forEach((pkg, i) => {
     const yearlyTotal = (pkg.price * 12).toLocaleString('nl-NL');
     const card = document.createElement('div');
     card.className = 'pricing-card';
@@ -64,7 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderModulesInModal(packagePrice) {
     modulesGrid.innerHTML = '';
     
-    config.modules.forEach(mod => {
+    onlineModules.forEach(mod => {
       // Dynamic price for Productreviews: 60% of package price
       let displayPrice = mod.price;
       if (mod.name === 'Productreviews' || mod.id === 'productreviews') {
