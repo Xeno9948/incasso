@@ -149,5 +149,11 @@
   "mollieLiveKey": "",
   "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD",
   "twoFactorSecret": null,
-  "twoFactorEnabled": false
+  "twoFactorEnabled": false,
+  "smtpHost": "smtp.gmail.com",
+  "smtpPort": "465",
+  "smtpUser": "",
+  "smtpPass": "",
+  "smtpFrom": "",
+  "smtpTo": "info@klantenvertelen.nl"
 }

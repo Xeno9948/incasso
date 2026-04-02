@@ -195,6 +195,7 @@
         <a href="#" onclick="showSection('mollie', this)"><i class="fas fa-credit-card"></i> Mollie</a>
         <a href="#" onclick="showSection('google', this)"><i class="fas fa-chart-line"></i> Google Ads</a>
         <a href="#" onclick="showSection('crm', this)"><i class="fas fa-shuttle-space"></i> CRM / Webhook</a>
+        <a href="#" onclick="showSection('email', this)"><i class="fas fa-envelope"></i> E-mail Instellingen</a>
         <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
         
         <div class="section-label">Overzicht</div>
@@ -316,6 +317,58 @@
         </div>
       </section>
 
+      <!-- Email Settings -->
+      <section id="section-email" class="section">
+        <h2>E-mail Instellingen</h2>
+        <p class="section-desc">Configureer Google SMTP om automatisch een e-mail te ontvangen bij elke geslaagde aankoop.</p>
+
+        <div style="background:#fff3e0;border:1px solid rgba(245,130,32,0.3);border-radius:10px;padding:16px 20px;margin-bottom:24px;font-size:0.84rem;">
+          <strong style="color:#f58220;"><i class="fas fa-info-circle"></i> Google App-wachtwoord vereist</strong><br>
+          <span style="color:#666;">Log in bij <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#f58220;">myaccount.google.com/apppasswords</a>, genereer een App-wachtwoord en gebruik dat hieronder. Je gewone Google-wachtwoord werkt niet.</span>
+        </div>
+
+        <div class="item-card open">
+          <div class="item-card-body" style="display:block;">
+            <div class="field-grid">
+              <div class="field">
+                <label>SMTP Host</label>
+                <input type="text" id="smtp-host" placeholder="smtp.gmail.com">
+              </div>
+              <div class="field">
+                <label>SMTP Poort</label>
+                <select id="smtp-port">
+                  <option value="465">465 (SSL — aanbevolen)</option>
+                  <option value="587">587 (TLS)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Google E-mailadres (gebruikersnaam)</label>
+                <input type="text" id="smtp-user" placeholder="jouwnaam@gmail.com">
+              </div>
+              <div class="field">
+                <label>App-wachtwoord</label>
+                <input type="password" id="smtp-pass" placeholder="xxxx xxxx xxxx xxxx">
+              </div>
+              <div class="field">
+                <label>Afzender (Van)</label>
+                <input type="text" id="smtp-from" placeholder="jouwnaam@gmail.com">
+              </div>
+              <div class="field">
+                <label>Ontvanger (Naar)</label>
+                <input type="text" id="smtp-to" placeholder="info@klantenvertelen.nl">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;margin-top:20px;">
+          <button class="save-btn" onclick="testSmtpConnection()" style="background:#555;">
+            <i class="fas fa-paper-plane"></i> Verstuur Test Mail
+          </button>
+          <span id="email-test-status" style="font-size:0.85rem;display:none;"></span>
+        </div>
+      </section>
+
       <!-- Security -->
       <section id="section-security" class="section">
         <h2>Beveiliging (2FA)</h2>
@@ -418,7 +471,13 @@ let config = {
   mollieDescription: 'Kiyoh Abonnement: {PACKAGE}',
   mollieTestMode: true,
   mollieLiveKey: '',
-  mollieTestKey: ''
+  mollieTestKey: '',
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: '465',
+  smtpUser: '',
+  smtpPass: '',
+  smtpFrom: '',
+  smtpTo: 'info@klantenvertelen.nl'
 };
 let password = '';
 
@@ -501,6 +560,12 @@ function renderConfigInit() {
   if (config.mollieTestMode === undefined) config.mollieTestMode = true;
   if (!config.mollieLiveKey) config.mollieLiveKey = '';
   if (!config.mollieTestKey) config.mollieTestKey = '';
+  if (!config.smtpHost) config.smtpHost = 'smtp.gmail.com';
+  if (!config.smtpPort) config.smtpPort = '465';
+  if (!config.smtpUser) config.smtpUser = '';
+  if (!config.smtpPass) config.smtpPass = '';
+  if (!config.smtpFrom) config.smtpFrom = '';
+  if (!config.smtpTo)   config.smtpTo   = 'info@klantenvertelen.nl';
 }
 
 function showSection(name, el) {
@@ -598,6 +663,14 @@ function renderAll() {
   document.getElementById('mollie-test-mode').checked = !!config.mollieTestMode;
   document.getElementById('mollie-live-key').value = config.mollieLiveKey || '';
   document.getElementById('mollie-test-key').value = config.mollieTestKey || '';
+
+  // Email Settings
+  document.getElementById('smtp-host').value = config.smtpHost || 'smtp.gmail.com';
+  document.getElementById('smtp-port').value = config.smtpPort || '465';
+  document.getElementById('smtp-user').value = config.smtpUser || '';
+  document.getElementById('smtp-pass').value = config.smtpPass || '';
+  document.getElementById('smtp-from').value = config.smtpFrom || '';
+  document.getElementById('smtp-to').value   = config.smtpTo   || 'info@klantenvertelen.nl';
   
   render2FAStatus();
   
@@ -927,6 +1000,14 @@ async function saveConfig() {
   config.mollieLiveKey = document.getElementById('mollie-live-key').value.trim();
   config.mollieTestKey = document.getElementById('mollie-test-key').value.trim();
 
+  // Email Settings
+  config.smtpHost = document.getElementById('smtp-host').value.trim();
+  config.smtpPort = document.getElementById('smtp-port').value;
+  config.smtpUser = document.getElementById('smtp-user').value.trim();
+  config.smtpPass = document.getElementById('smtp-pass').value;
+  config.smtpFrom = document.getElementById('smtp-from').value.trim();
+  config.smtpTo   = document.getElementById('smtp-to').value.trim();
+
   const res = await fetch('/api/config', {
     method: 'POST',
     headers: { 
@@ -957,6 +1038,48 @@ function copyEmbed() {
 
 function logout() {
   window.location.reload();
+}
+
+// ── SMTP TEST ────────────────────────────────────────────────────────
+async function testSmtpConnection() {
+  // First save the current SMTP values from the form into config
+  config.smtpHost = document.getElementById('smtp-host').value.trim();
+  config.smtpPort = document.getElementById('smtp-port').value;
+  config.smtpUser = document.getElementById('smtp-user').value.trim();
+  config.smtpPass = document.getElementById('smtp-pass').value;
+  config.smtpFrom = document.getElementById('smtp-from').value.trim();
+  config.smtpTo   = document.getElementById('smtp-to').value.trim();
+
+  const statusEl = document.getElementById('email-test-status');
+  statusEl.style.display = 'inline';
+  statusEl.style.color = '#888';
+  statusEl.textContent = 'Verbinding testen...';
+
+  try {
+    // Save config first so backend uses the latest values
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': password },
+      body: JSON.stringify({ ...config })
+    });
+
+    const res = await fetch('/api/admin/test-email', {
+      method: 'POST',
+      headers: { 'Authorization': password }
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      statusEl.style.color = '#68b03d';
+      statusEl.innerHTML = '<i class="fas fa-check"></i> ' + data.message;
+    } else {
+      statusEl.style.color = '#e74c3c';
+      statusEl.innerHTML = '<i class="fas fa-times"></i> ' + data.error;
+    }
+  } catch (err) {
+    statusEl.style.color = '#e74c3c';
+    statusEl.innerHTML = '<i class="fas fa-times"></i> Verbindingsfout.';
+  }
 }
 
 // ── 2FA MANAGEMENT ───────────────────────────────────────────

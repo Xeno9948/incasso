@@ -5,6 +5,7 @@ const QRCode = require('qrcode');
 const exact = require('./exact');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
+const nodemailer = require('nodemailer');
 const authenticator = new TOTP({
   crypto: new NobleCryptoPlugin(),
   base32: new ScureBase32Plugin()
@@ -14,6 +15,72 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
+// ─── SMTP EMAIL HELPER ────────────────────────────────────────────────────────
+async function sendInternalNotification(metadata) {
+  const config = await getConfig();
+
+  const smtpHost = config.smtpHost || process.env.SMTP_HOST;
+  const smtpPort = parseInt(config.smtpPort || process.env.SMTP_PORT || '465', 10);
+  const smtpUser = config.smtpUser || process.env.SMTP_USER;
+  const smtpPass = config.smtpPass || process.env.SMTP_PASS;
+  const smtpFrom = config.smtpFrom || smtpUser;
+  const smtpTo   = config.smtpTo   || 'info@klantenvertelen.nl';
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.log('SMTP not configured — skipping internal notification email.');
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass }
+  });
+
+  const { customerName, businessName, website, customerEmail, customerPhone,
+          packageId, yearlyAmount, modulesList, description } = metadata;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#f58220;padding:24px 32px;border-radius:10px 10px 0 0;">
+        <h2 style="color:white;margin:0;">✅ Nieuw abonnement afgesloten</h2>
+      </div>
+      <div style="background:#fff;border:1px solid #eee;border-top:none;padding:32px;border-radius:0 0 10px 10px;">
+        <h3 style="color:#1a1a1a;margin-top:0;">Klantgegevens</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;width:180px;">Contactpersoon</td><td style="padding:10px 0;font-weight:600;">${customerName || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Bedrijfsnaam</td><td style="padding:10px 0;font-weight:600;">${businessName || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">E-mail</td><td style="padding:10px 0;"><a href="mailto:${customerEmail}">${customerEmail || '—'}</a></td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Telefoon</td><td style="padding:10px 0;">${customerPhone || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Website</td><td style="padding:10px 0;"><a href="${website}">${website || '—'}</a></td></tr>
+        </table>
+
+        <h3 style="color:#1a1a1a;margin-top:24px;">Pakketgegevens</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;width:180px;">Pakket</td><td style="padding:10px 0;font-weight:600;">${packageId || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Modules</td><td style="padding:10px 0;">${modulesList || 'Geen extra modules'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Jaarbedrag</td><td style="padding:10px 0;font-weight:600;color:#68b03d;">€${yearlyAmount || '—'}</td></tr>
+          <tr><td style="padding:10px 0;color:#888;">Omschrijving</td><td style="padding:10px 0;">${description || '—'}</td></tr>
+        </table>
+
+        <div style="margin-top:24px;padding:16px;background:#f9f9f9;border-radius:8px;font-size:12px;color:#aaa;">
+          Dit is een automatisch bericht van het Kiyoh betalingssysteem.
+        </div>
+      </div>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `"Kiyoh Betalingen" <${smtpFrom}>`,
+    to: smtpTo,
+    subject: `✅ Nieuw abonnement: ${businessName || customerName} — ${packageId}`,
+    html
+  });
+
+  console.log(`Internal notification email sent to ${smtpTo}`);
+}
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
@@ -420,6 +487,13 @@ app.post('/api/webhook', async (req, res) => {
         }
       }
 
+      // ─── SEND INTERNAL NOTIFICATION EMAIL ────────────────────────────
+      try {
+        await sendInternalNotification(payment.metadata);
+      } catch (err) {
+        console.error('Failed to send internal notification email:', err.message);
+      }
+
       // ─── FIRE EXACT ONLINE RELATION CREATION (NEW CUSTOMERS) ──────────
       // If invoice_id is empty, it's a new customer paying via the pricing page
       if (!payment.metadata.invoice_id) {
@@ -574,6 +648,47 @@ app.get('/api/qr/invoice', async (req, res) => {
   } catch (err) {
     console.error('QR Gen Error:', err);
     res.status(500).send('Error generating QR code');
+  }
+});
+
+// ─── SMTP TEST EMAIL ROUTE ───────────────────────────────────────────────────
+app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
+  try {
+    const config = await getConfig();
+
+    const smtpHost = config.smtpHost || process.env.SMTP_HOST;
+    const smtpPort = parseInt(config.smtpPort || process.env.SMTP_PORT || '465', 10);
+    const smtpUser = config.smtpUser || process.env.SMTP_USER;
+    const smtpPass = config.smtpPass || process.env.SMTP_PASS;
+    const smtpFrom = config.smtpFrom || smtpUser;
+    const smtpTo   = config.smtpTo   || 'info@klantenvertelen.nl';
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.status(400).json({ error: 'SMTP instellingen zijn niet volledig ingevuld.' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+
+    await transporter.sendMail({
+      from: `"Kiyoh Betalingen" <${smtpFrom}>`,
+      to: smtpTo,
+      subject: '✅ Test e-mail van Kiyoh betalingssysteem',
+      html: `<div style="font-family:Arial,sans-serif;padding:24px;">
+        <h2 style="color:#f58220;">E-mail configuratie werkt!</h2>
+        <p>Dit is een test e-mail van jouw Kiyoh betalingsportaal.</p>
+        <p>Toekomstige succesvolle aankopen worden naar dit adres gestuurd: <strong>${smtpTo}</strong></p>
+      </div>`
+    });
+
+    res.json({ success: true, message: `Test e-mail verstuurd naar ${smtpTo}` });
+  } catch (err) {
+    console.error('Test email failed:', err);
+    res.status(500).json({ error: 'Versturen mislukt: ' + err.message });
   }
 });
 
