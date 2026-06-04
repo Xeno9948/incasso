@@ -434,18 +434,26 @@ app.post('/api/webhook', async (req, res) => {
         const startDateStr = startDate.toISOString().split('T')[0];
         console.log(`Subscription interval: ${interval}. First payment paid. Next billing date set to: ${startDateStr}`);
 
-        await mollieClient.customerSubscriptions.create({
-          customerId: payment.customerId,
-          amount: {
-            currency: 'EUR',
-            value: yearlyAmount,
-          },
-          interval: interval,
-          startDate: startDateStr, // Start the automated billing after the initial period
-          description: `Abonnement verlenging: ${packageId || 'Service'}`,
-          metadata: payment.metadata
-        });
-        console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
+        try {
+          await mollieClient.customerSubscriptions.create({
+            customerId: payment.customerId,
+            amount: {
+              currency: 'EUR',
+              value: yearlyAmount,
+            },
+            interval: interval,
+            startDate: startDateStr, // Start the automated billing after the initial period
+            description: `Abonnement verlenging: ${packageId || 'Service'}`,
+            metadata: payment.metadata
+          });
+          console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
+        } catch (subErr) {
+          if (subErr.message && subErr.message.includes('already exists')) {
+            console.warn(`Subscription already exists for Customer ${payment.customerId} - skipping duplicate creation.`);
+          } else {
+            throw subErr;
+          }
+        }
       }
 
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
