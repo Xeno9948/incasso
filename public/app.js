@@ -79,8 +79,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.className = 'premium-module-card';
       card.setAttribute('data-module', mod.name);
       card.setAttribute('data-price', displayPrice);
+      let mediaHtml = `<img src="${mod.image}" alt="${mod.name}">`;
+      if (mod.icon) {
+        mediaHtml = `<i class="${mod.icon}" style="font-size: 1.5rem; color: var(--primary-orange);"></i>`;
+      }
+
       card.innerHTML = `
-        <div class="pm-image"><img src="${mod.image}" alt="${mod.name}"></div>
+        <div class="pm-image">${mediaHtml}</div>
         <div class="pm-content">
           <h3><a href="${mod.link}" target="_blank" class="feature-link">${mod.name}</a></h3>
           <p>${mod.description}</p>

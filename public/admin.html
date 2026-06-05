@@ -888,6 +888,13 @@ function renderModules() {
             '<label>Link (meer info)</label>' +
             '<input type="url" value="' + mod.link + '" oninput="config.modules[' + i + '].link=this.value" placeholder="https://...">' +
           '</div>' +
+          '<div class="field full">' +
+            '<label>Icoon (of kies afbeelding hierboven)</label>' +
+            '<div class="icon-options" style="margin-bottom: 10px;">' +
+              ICONS.map(ic => '<div class="icon-opt ' + ((mod.icon || '') === ic ? 'selected' : '') + '" title="' + ic + '" onclick="selectModuleIcon(' + i + ', \'' + ic + '\', this)"><i class="' + ic + '"></i></div>').join('') +
+            '</div>' +
+            '<input type="text" id="mod-icon-' + i + '" value="' + (mod.icon || '') + '" placeholder="Aangepaste Font Awesome class (bijv. fas fa-robot)" oninput="customModuleIconInput(' + i + ', this.value, this)">' +
+          '</div>' +
           '<div class="field full" style="align-items:flex-start; margin-top: 10px;">' +
             '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer;">' +
               '<input type="checkbox" ' + (mod.offline ? 'checked' : '') + ' onchange="config.modules[' + i + '].offline=this.checked; renderModules()">' +
@@ -905,7 +912,7 @@ function renderModules() {
 }
 
 function addModule() {
-  config.modules.push({ id: 'new-' + Date.now(), name: 'Nieuwe Module', price: 0, description: '', image: '', link: '' });
+  config.modules.push({ id: 'new-' + Date.now(), name: 'Nieuwe Module', price: 0, description: '', image: '', link: '', icon: '' });
   renderModules();
 }
 
@@ -1061,6 +1068,25 @@ function customIconInput(featureIndex, val, el) {
   config.coreFeatures[featureIndex].icon = val;
   const headerIcon = el.closest('.item-card').querySelector('.item-card-title i');
   if (headerIcon) headerIcon.className = val || 'fas fa-question';
+  el.closest('.field').querySelectorAll('.icon-opt').forEach(o => {
+    if (o.title === val) {
+      o.classList.add('selected');
+    } else {
+      o.classList.remove('selected');
+    }
+  });
+}
+
+function selectModuleIcon(moduleIndex, icon, el) {
+  config.modules[moduleIndex].icon = icon;
+  el.closest('.icon-options').querySelectorAll('.icon-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  const textInput = el.closest('.field').querySelector('input[type="text"]');
+  if (textInput) textInput.value = icon;
+}
+
+function customModuleIconInput(moduleIndex, val, el) {
+  config.modules[moduleIndex].icon = val;
   el.closest('.field').querySelectorAll('.icon-opt').forEach(o => {
     if (o.title === val) {
       o.classList.add('selected');
