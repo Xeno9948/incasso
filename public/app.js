@@ -79,9 +79,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.className = 'premium-module-card';
       card.setAttribute('data-module', mod.name);
       card.setAttribute('data-price', displayPrice);
-      let mediaHtml = `<img src="${mod.image}" alt="${mod.name}">`;
+      let mediaHtml = '';
       if (mod.icon) {
         mediaHtml = `<i class="${mod.icon}" style="font-size: 1.5rem; color: var(--primary-orange);"></i>`;
+      } else if (mod.image) {
+        mediaHtml = `<img src="${mod.image}" alt="${mod.name}">`;
+      } else {
+        mediaHtml = `<i class="fas fa-puzzle-piece" style="font-size: 1.5rem; color: var(--primary-orange);"></i>`;
       }
 
       card.innerHTML = `

@@ -877,7 +877,7 @@ function renderModules() {
           '<div class="field full">' +
             '<label>Afbeelding</label>' +
             '<div style="display:flex; gap:10px; align-items:center;">' +
-              '<input type="text" id="mod-image-' + i + '" value="' + mod.image + '" oninput="config.modules[' + i + '].image=this.value; updateImagePreview(this, this.value)" placeholder="https://... of upload bestand" style="flex:1;">' +
+              '<input type="text" id="mod-image-' + i + '" value="' + mod.image + '" oninput="config.modules[' + i + '].image=this.value; updateImagePreview(this, this.value); clearModuleIcon(' + i + ', this)" placeholder="https://... of upload bestand" style="flex:1;">' +
               '<label class="save-btn" id="upload-btn-' + i + '" style="background:#555; font-size:0.8rem; padding:10px 16px; white-space:nowrap; cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:6px;">' +
                 '<i class="fas fa-upload"></i> Upload' +
                 '<input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload(this, ' + i + ')">' +
@@ -972,6 +972,7 @@ async function handleImageUpload(input, index) {
         config.modules[index].image = data.url;
         textInput.value = data.url;
         updateImagePreview(textInput, data.url);
+        clearModuleIcon(index, textInput);
       } else {
         throw new Error('Geen URL ontvangen van server');
       }
@@ -1079,14 +1080,37 @@ function customIconInput(featureIndex, val, el) {
 
 function selectModuleIcon(moduleIndex, icon, el) {
   config.modules[moduleIndex].icon = icon;
+  
+  // Clear image
+  clearModuleImage(moduleIndex, el);
+
   el.closest('.icon-options').querySelectorAll('.icon-opt').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
   const textInput = el.closest('.field').querySelector('input[type="text"]');
   if (textInput) textInput.value = icon;
+
+  // Update header icon preview
+  const card = el.closest('.item-card');
+  const titleContainer = card.querySelector('.item-card-title');
+  const existingIcon = titleContainer.querySelector('i');
+  if (existingIcon) {
+    existingIcon.className = icon;
+  } else {
+    const iconEl = document.createElement('i');
+    iconEl.className = icon;
+    iconEl.style.cssText = 'color:#f58220;width:18px;text-align:center;margin-right:8px;';
+    titleContainer.insertBefore(iconEl, titleContainer.firstChild);
+  }
 }
 
 function customModuleIconInput(moduleIndex, val, el) {
   config.modules[moduleIndex].icon = val;
+  
+  if (val) {
+    // Clear image
+    clearModuleImage(moduleIndex, el);
+  }
+
   el.closest('.field').querySelectorAll('.icon-opt').forEach(o => {
     if (o.title === val) {
       o.classList.add('selected');
@@ -1094,6 +1118,54 @@ function customModuleIconInput(moduleIndex, val, el) {
       o.classList.remove('selected');
     }
   });
+
+  // Update header icon preview
+  const card = el.closest('.item-card');
+  const titleContainer = card.querySelector('.item-card-title');
+  const existingIcon = titleContainer.querySelector('i');
+  if (val) {
+    if (existingIcon) {
+      existingIcon.className = val;
+    } else {
+      const iconEl = document.createElement('i');
+      iconEl.className = val;
+      iconEl.style.cssText = 'color:#f58220;width:18px;text-align:center;margin-right:8px;';
+      titleContainer.insertBefore(iconEl, titleContainer.firstChild);
+    }
+  } else {
+    if (existingIcon) {
+      existingIcon.remove();
+    }
+  }
+}
+
+function clearModuleIcon(moduleIndex, el) {
+  config.modules[moduleIndex].icon = '';
+  const cardBody = el.closest('.item-card-body');
+  if (cardBody) {
+    const iconInput = cardBody.querySelector('input[id^="mod-icon-"]');
+    if (iconInput) iconInput.value = '';
+    cardBody.querySelectorAll('.icon-options .icon-opt').forEach(o => o.classList.remove('selected'));
+  }
+  // Remove header icon preview
+  const card = el.closest('.item-card');
+  const titleContainer = card.querySelector('.item-card-title');
+  const existingIcon = titleContainer.querySelector('i');
+  if (existingIcon) {
+    existingIcon.remove();
+  }
+}
+
+function clearModuleImage(moduleIndex, el) {
+  config.modules[moduleIndex].image = '';
+  const cardBody = el.closest('.item-card-body');
+  if (cardBody) {
+    const imgInput = cardBody.querySelector('input[id^="mod-image-"]');
+    if (imgInput) {
+      imgInput.value = '';
+      updateImagePreview(imgInput, '');
+    }
+  }
 }
 
 function toggleCard(header) {
