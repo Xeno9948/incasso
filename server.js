@@ -110,8 +110,8 @@ async function getConfig() {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use((req, res, next) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   next();
@@ -253,6 +253,39 @@ app.post('/api/config', authLimiter, authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Save error:', err);
     res.status(500).json({ error: 'Could not save config' });
+  }
+});
+
+// Setup Image Upload API Route
+app.post('/api/upload', authMiddleware, async (req, res) => {
+  try {
+    const { fileName, fileType, base64Data } = req.body;
+    if (!fileName || !base64Data) {
+      return res.status(400).json({ error: 'Missing fileName or base64Data' });
+    }
+
+    // Extract the raw base64 data (strip prefix like data:image/png;base64,)
+    const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Content, 'base64');
+
+    const uploadDir = path.join(__dirname, 'public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Clean up filename and append timestamp
+    const ext = path.extname(fileName) || '.png';
+    const name = path.basename(fileName, ext).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const uniqueFileName = `${name}-${Date.now()}${ext}`;
+    const filePath = path.join(uploadDir, uniqueFileName);
+
+    await fs.promises.writeFile(filePath, buffer);
+    
+    // Return relative URL
+    res.json({ success: true, url: `/uploads/${uniqueFileName}` });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Failed to upload image: ' + err.message });
   }
 });
 
@@ -434,26 +467,18 @@ app.post('/api/webhook', async (req, res) => {
         const startDateStr = startDate.toISOString().split('T')[0];
         console.log(`Subscription interval: ${interval}. First payment paid. Next billing date set to: ${startDateStr}`);
 
-        try {
-          await mollieClient.customerSubscriptions.create({
-            customerId: payment.customerId,
-            amount: {
-              currency: 'EUR',
-              value: yearlyAmount,
-            },
-            interval: interval,
-            startDate: startDateStr, // Start the automated billing after the initial period
-            description: `Abonnement verlenging: ${packageId || 'Service'}`,
-            metadata: payment.metadata
-          });
-          console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
-        } catch (subErr) {
-          if (subErr.message && subErr.message.includes('already exists')) {
-            console.warn(`Subscription already exists for Customer ${payment.customerId} - skipping duplicate creation.`);
-          } else {
-            throw subErr;
-          }
-        }
+        await mollieClient.customerSubscriptions.create({
+          customerId: payment.customerId,
+          amount: {
+            currency: 'EUR',
+            value: yearlyAmount,
+          },
+          interval: interval,
+          startDate: startDateStr, // Start the automated billing after the initial period
+          description: `Abonnement verlenging: ${packageId || 'Service'}`,
+          metadata: payment.metadata
+        });
+        console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
       }
 
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────

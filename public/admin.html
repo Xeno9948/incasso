@@ -868,8 +868,14 @@ function renderModules() {
             '<textarea oninput="config.modules[' + i + '].description=this.value">' + mod.description + '</textarea>' +
           '</div>' +
           '<div class="field full">' +
-            '<label>Afbeelding URL</label>' +
-            '<input type="url" value="' + mod.image + '" oninput="config.modules[' + i + '].image=this.value; updateImagePreview(this, this.value)" placeholder="https://...">' +
+            '<label>Afbeelding</label>' +
+            '<div style="display:flex; gap:10px; align-items:center;">' +
+              '<input type="text" id="mod-image-' + i + '" value="' + mod.image + '" oninput="config.modules[' + i + '].image=this.value; updateImagePreview(this, this.value)" placeholder="https://... of upload bestand" style="flex:1;">' +
+              '<label class="save-btn" id="upload-btn-' + i + '" style="background:#555; font-size:0.8rem; padding:10px 16px; white-space:nowrap; cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:6px;">' +
+                '<i class="fas fa-upload"></i> Upload' +
+                '<input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload(this, ' + i + ')">' +
+              '</label>' +
+            '</div>' +
           '</div>' +
           '<div class="field full">' +
             '<label>Link (meer info)</label>' +
@@ -911,6 +917,69 @@ function updateImagePreview(el, url) {
   } else {
     container.style.display = 'none';
   }
+}
+
+async function handleImageUpload(input, index) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const btn = document.getElementById('upload-btn-' + index);
+  const textInput = document.getElementById('mod-image-' + index);
+  const originalBtnHtml = btn.innerHTML;
+
+  // Set loading state
+  btn.style.pointerEvents = 'none';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Bezig...';
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Data = e.target.result;
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': password
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+          base64Data: base64Data
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Upload mislukt');
+      }
+
+      const data = await res.json();
+      if (data.success && data.url) {
+        config.modules[index].image = data.url;
+        textInput.value = data.url;
+        updateImagePreview(textInput, data.url);
+      } else {
+        throw new Error('Geen URL ontvangen van server');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Uploaden mislukt: ' + err.message);
+    } finally {
+      // Restore button state
+      btn.style.pointerEvents = 'auto';
+      btn.innerHTML = originalBtnHtml;
+      // Reset input so file selection triggers change even for same file
+      input.value = '';
+    }
+  };
+
+  reader.onerror = function() {
+    alert('Fout bij het lezen van het bestand.');
+    btn.style.pointerEvents = 'auto';
+    btn.innerHTML = originalBtnHtml;
+  };
+
+  reader.readAsDataURL(file);
 }
 
 function renderFeatures() {
