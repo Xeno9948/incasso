@@ -392,7 +392,7 @@ app.post('/api/checkout', async (req, res) => {
         const selectedModules = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen extra modules';
         const explicitMessage = `Pakket geselecteerd: ${package.name}\nModules geselecteerd: ${selectedModules}`;
 
-        fetch(config.crmWebhookUrl, {
+        fetch(crmUrl, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
