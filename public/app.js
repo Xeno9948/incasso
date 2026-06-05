@@ -273,18 +273,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkoutBtn.textContent = 'Bezig…';
     checkoutBtn.disabled = true;
 
-    // Collect UTM Parameters
-    const params = new URLSearchParams(window.location.search);
-    const utms = {
-      utm_source: params.get('utm_source') || '',
-      gclid: params.get('gclid') || '',
-      gbraid: params.get('gbraid') || '',
-      fbclid: params.get('fbclid') || '',
-      li_fat_id: params.get('li_fat_id') || '',
-      ga4id: params.get('ga4id') || '',
-      user_agent: navigator.userAgent || ''
-      // IP will be handled server-side
+    // Collect UTM Parameters (from URL query, referrer, or session storage)
+    const getParam = (key) => {
+      const urlParams = new URLSearchParams(window.location.search);
+      let val = urlParams.get(key);
+      if (val) return val;
+
+      // Try referrer fallback (for iframe embeds)
+      try {
+        if (document.referrer) {
+          const refUrl = new URL(document.referrer);
+          val = refUrl.searchParams.get(key);
+          if (val) return val;
+        }
+      } catch (e) {}
+
+      // Try sessionStorage fallback
+      try {
+        val = sessionStorage.getItem('kiyoh_' + key);
+        if (val) return val;
+      } catch (e) {}
+
+      return '';
     };
+
+    // Store in sessionStorage and construct UTMs object
+    const utmKeys = ['utm_source', 'gclid', 'gbraid', 'fbclid', 'li_fat_id', 'ga4id'];
+    const utms = { user_agent: navigator.userAgent || '' };
+    
+    utmKeys.forEach(key => {
+      const val = getParam(key);
+      utms[key] = val;
+      if (val) {
+        try {
+          sessionStorage.setItem('kiyoh_' + key, val);
+        } catch (e) {}
+      }
+    });
 
     try {
       const res = await fetch('/api/checkout', {

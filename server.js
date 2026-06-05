@@ -298,6 +298,12 @@ app.post('/api/checkout', async (req, res) => {
     const user_ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     if (utms) utms.user_ip = user_ip;
 
+    // Create a copy of utms for Mollie metadata and truncate user_agent to stay safely under Mollie's 1kB limit
+    const mollieUtms = utms ? { ...utms } : {};
+    if (mollieUtms.user_agent) {
+      mollieUtms.user_agent = mollieUtms.user_agent.substring(0, 70);
+    }
+
     // Load config for dynamic settings
     const config = await getConfig();
 
@@ -365,7 +371,7 @@ app.post('/api/checkout', async (req, res) => {
         customerEmail: customer.email,
         customerPhone: customer.phone || '',
         modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
-        utms: utms || {}
+        utms: mollieUtms
       }
     });
 
