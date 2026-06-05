@@ -455,7 +455,14 @@
 </div>
 
 <script>
-const ICONS = ['fas fa-star', 'fas fa-check-circle', 'fas fa-rocket', 'fas fa-shield-alt', 'fas fa-users', 'fas fa-clock', 'fas fa-cloud', 'fas fa-mobile-alt', 'fas fa-cog', 'fas fa-lock'];
+const ICONS = [
+  'fas fa-star', 'fas fa-check-circle', 'fas fa-rocket', 'fas fa-shield-alt',
+  'fas fa-users', 'fas fa-clock', 'fas fa-cloud', 'fas fa-mobile-alt',
+  'fas fa-cog', 'fas fa-lock', 'fas fa-store', 'fas fa-box',
+  'fas fa-hand-point-up', 'fas fa-link', 'fas fa-qrcode', 'fas fa-envelope-open-text',
+  'fas fa-code', 'fas fa-print', 'fas fa-plug', 'fas fa-code-branch',
+  'fas fa-robot'
+];
 
 // ── STATE ─────────────────────────────────────────────────────
 let config = { 
@@ -1012,9 +1019,10 @@ function renderFeatures() {
           '</div>' +
           '<div class="field full">' +
             '<label>Icoon</label>' +
-            '<div class="icon-options">' +
+            '<div class="icon-options" style="margin-bottom: 10px;">' +
               ICONS.map(ic => '<div class="icon-opt ' + (cf.icon === ic ? 'selected' : '') + '" title="' + ic + '" onclick="selectIcon(' + i + ', \'' + ic + '\', this)"><i class="' + ic + '"></i></div>').join('') +
             '</div>' +
+            '<input type="text" value="' + cf.icon + '" placeholder="Aangepaste Font Awesome class (bijv. fas fa-robot)" oninput="customIconInput(' + i + ', this.value, this)">' +
           '</div>' +
         '</div>' +
         '<button class="delete-item-btn" onclick="deleteFeature(' + i + ')"><i class="fas fa-trash"></i> Feature verwijderen</button>' +
@@ -1043,6 +1051,23 @@ function selectIcon(featureIndex, icon, el) {
   config.coreFeatures[featureIndex].icon = icon;
   el.closest('.icon-options').querySelectorAll('.icon-opt').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
+  const textInput = el.closest('.field').querySelector('input[type="text"]');
+  if (textInput) textInput.value = icon;
+  const headerIcon = el.closest('.item-card').querySelector('.item-card-title i');
+  if (headerIcon) headerIcon.className = icon;
+}
+
+function customIconInput(featureIndex, val, el) {
+  config.coreFeatures[featureIndex].icon = val;
+  const headerIcon = el.closest('.item-card').querySelector('.item-card-title i');
+  if (headerIcon) headerIcon.className = val || 'fas fa-question';
+  el.closest('.field').querySelectorAll('.icon-opt').forEach(o => {
+    if (o.title === val) {
+      o.classList.add('selected');
+    } else {
+      o.classList.remove('selected');
+    }
+  });
 }
 
 function toggleCard(header) {

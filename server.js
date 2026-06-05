@@ -440,6 +440,15 @@ app.post('/api/webhook', async (req, res) => {
     console.log(`Webhook triggered for Payment ID: ${paymentId}. Status: ${payment.status}`);
 
     if (payment.status === 'paid') {
+      const alreadyProcessed = await db.isPaymentProcessed(paymentId);
+      if (alreadyProcessed) {
+        console.log(`Webhook triggered again for already processed Payment ID: ${paymentId}. Skipping actions.`);
+        return res.status(200).send('OK');
+      }
+
+      // Mark it as processed immediately to prevent concurrent races
+      await db.markPaymentProcessed(paymentId);
+
       console.log('Payment PAID. Processing Won lead...');
       const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
       

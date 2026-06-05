@@ -22,6 +22,12 @@ if (DATABASE_URL) {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS kiyoh_processed_payments (
+          payment_id VARCHAR(50) PRIMARY KEY,
+          processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
       console.log('Database initialized successfully.');
     } catch (err) {
       console.error('Failed to initialize database:', err);
@@ -69,8 +75,48 @@ async function saveSettings(config) {
   }
 }
 
+const processedCache = new Set();
+
+/**
+ * Check if a payment ID has already been successfully processed
+ */
+async function isPaymentProcessed(paymentId) {
+  if (processedCache.has(paymentId)) return true;
+  if (!pool) return false;
+
+  try {
+    const res = await pool.query('SELECT 1 FROM kiyoh_processed_payments WHERE payment_id = $1', [paymentId]);
+    if (res.rows.length > 0) {
+      processedCache.add(paymentId);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('Error checking processed payment:', err);
+    return false;
+  }
+}
+
+/**
+ * Record a payment ID as successfully processed
+ */
+async function markPaymentProcessed(paymentId) {
+  processedCache.add(paymentId);
+  if (!pool) return true;
+
+  try {
+    await pool.query('INSERT INTO kiyoh_processed_payments (payment_id) VALUES ($1) ON CONFLICT DO NOTHING', [paymentId]);
+    return true;
+  } catch (err) {
+    console.error('Error marking payment processed:', err);
+    return false;
+  }
+}
+
 module.exports = {
   loadSettings,
   saveSettings,
+  isPaymentProcessed,
+  markPaymentProcessed,
   isDbEnabled: !!pool
 };
