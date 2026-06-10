@@ -261,11 +261,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   checkoutBtn.addEventListener('click', async () => {
     const pName    = document.getElementById('customer-personal-name').value.trim();
     const bName    = document.getElementById('customer-business-name').value.trim();
+    const kvk      = document.getElementById('customer-kvk').value.trim();
+    const address  = document.getElementById('customer-street').value.trim();
+    const postal   = document.getElementById('customer-postal').value.trim();
+    const city     = document.getElementById('customer-city').value.trim();
+    const country  = document.getElementById('customer-country').value;
     const website  = document.getElementById('customer-website').value.trim();
     const email    = document.getElementById('customer-email').value.trim();
     const phone    = document.getElementById('customer-phone').value.trim();
 
-    if (!pName || !bName || !website || !email || !phone) {
+    if (!pName || !bName || !kvk || !address || !postal || !city || !country || !website || !email || !phone) {
       alert('Vul a.u.b. alle velden in om verder te gaan.');
       return;
     }
@@ -315,7 +320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, customer: { pName, bName, website, email, phone }, utms })
+        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, address, postal, city, country, website, email, phone }, utms })
       });
 
       if (!res.ok) throw new Error('Server error');

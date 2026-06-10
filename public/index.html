@@ -147,12 +147,48 @@
 
           <!-- Customer Details -->
           <h3 style="margin: 24px 0 12px;">Uw Gegevens</h3>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <input type="text" id="customer-personal-name" placeholder="Uw Voornaam & Achternaam" required class="input-field">
-            <input type="text" id="customer-business-name" placeholder="Bedrijfsnaam" required class="input-field">
-            <input type="url"  id="customer-website" placeholder="Website URL (bijv. https://...)" required class="input-field">
-            <input type="email" id="customer-email" placeholder="E-mailadres" required class="input-field">
-            <input type="tel" id="customer-phone" placeholder="Telefoonnummer" required class="input-field">
+          <div class="form-grid">
+            <div class="form-grid-full">
+              <input type="text" id="customer-personal-name" placeholder="Uw Voornaam & Achternaam" required class="input-field">
+            </div>
+            <div>
+              <input type="text" id="customer-business-name" placeholder="Bedrijfsnaam" required class="input-field">
+            </div>
+            <div>
+              <input type="text" id="customer-kvk" placeholder="KVK-nummer" required class="input-field">
+            </div>
+            <div class="form-grid-full">
+              <input type="text" id="customer-street" placeholder="Straat & Huisnummer" required class="input-field">
+            </div>
+            <div>
+              <input type="text" id="customer-postal" placeholder="Postcode" required class="input-field">
+            </div>
+            <div>
+              <input type="text" id="customer-city" placeholder="Plaats" required class="input-field">
+            </div>
+            <div class="form-grid-full">
+              <select id="customer-country" required class="input-field" style="background: white;">
+                <option value="NL" selected>Nederland</option>
+                <option value="BE">België</option>
+                <option value="DE">Duitsland</option>
+                <option value="FR">Frankrijk</option>
+                <option value="ES">Spanje</option>
+                <option value="IT">Italië</option>
+                <option value="AT">Oostenrijk</option>
+                <option value="CH">Zwitserland</option>
+                <option value="GB">Verenigd Koninkrijk</option>
+                <option value="US">Verenigde Staten</option>
+              </select>
+            </div>
+            <div class="form-grid-full">
+              <input type="url"  id="customer-website" placeholder="Website URL (bijv. https://...)" required class="input-field">
+            </div>
+            <div>
+              <input type="email" id="customer-email" placeholder="E-mailadres" required class="input-field">
+            </div>
+            <div>
+              <input type="tel" id="customer-phone" placeholder="Telefoonnummer" required class="input-field">
+            </div>
           </div>
         </div>
 

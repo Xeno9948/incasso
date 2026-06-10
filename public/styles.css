@@ -188,6 +188,16 @@ p { font-size: 0.9rem; color: var(--text-light); }
 }
 .input-field:focus { border-color: var(--primary-orange); }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.form-grid-full {
+  grid-column: span 2;
+}
+
 /* Sticky Height helper */
 body.is-iframe { padding-bottom: 0; }
 .journey-wrapper { min-height: 400px; }
@@ -232,4 +242,12 @@ body.is-iframe { padding-bottom: 0; }
   
   .pricing-grid { grid-template-columns: 1fr; }
   h1 { font-size: 1.6rem; }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .form-grid-full {
+    grid-column: span 1;
+  }
 }

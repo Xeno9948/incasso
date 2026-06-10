@@ -40,7 +40,8 @@ async function sendInternalNotification(metadata) {
   });
 
   const { customerName, businessName, website, customerEmail, customerPhone,
-          packageId, yearlyAmount, modulesList, description } = metadata;
+          packageId, yearlyAmount, modulesList, description,
+          businessAddress, businessPostal, businessCity, businessCountry, kvkNumber } = metadata;
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -52,6 +53,11 @@ async function sendInternalNotification(metadata) {
         <table style="width:100%;border-collapse:collapse;font-size:14px;">
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;width:180px;">Contactpersoon</td><td style="padding:10px 0;font-weight:600;">${customerName || '—'}</td></tr>
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Bedrijfsnaam</td><td style="padding:10px 0;font-weight:600;">${businessName || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">KVK-nummer</td><td style="padding:10px 0;font-weight:600;">${kvkNumber || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Adres</td><td style="padding:10px 0;">${businessAddress || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Postcode</td><td style="padding:10px 0;">${businessPostal || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Plaats</td><td style="padding:10px 0;">${businessCity || '—'}</td></tr>
+          <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Land</td><td style="padding:10px 0;">${businessCountry || '—'}</td></tr>
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">E-mail</td><td style="padding:10px 0;"><a href="mailto:${customerEmail}">${customerEmail || '—'}</a></td></tr>
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Telefoon</td><td style="padding:10px 0;">${customerPhone || '—'}</td></tr>
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Website</td><td style="padding:10px 0;"><a href="${website}">${website || '—'}</a></td></tr>
@@ -361,6 +367,12 @@ app.post('/api/checkout', async (req, res) => {
       redirectUrl: `${baseUrl}/success.html`,
       cancelUrl: `${baseUrl}/cancel.html`,
       webhookUrl: `${baseUrl}/api/webhook`, 
+      billingAddress: {
+        streetAndNumber: customer.address,
+        postalCode: customer.postal,
+        city: customer.city,
+        country: customer.country
+      },
       metadata: {
         packageId: package.name,
         yearlyAmount: amountStr,
@@ -370,6 +382,11 @@ app.post('/api/checkout', async (req, res) => {
         website: customer.website,
         customerEmail: customer.email,
         customerPhone: customer.phone || '',
+        businessAddress: customer.address,
+        businessPostal: customer.postal,
+        businessCity: customer.city,
+        businessCountry: customer.country,
+        kvkNumber: customer.kvk,
         modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
         utms: mollieUtms
       }
@@ -390,7 +407,7 @@ app.post('/api/checkout', async (req, res) => {
         
         // Build an explicit message with selected package & modules
         const selectedModules = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen extra modules';
-        const explicitMessage = `Pakket geselecteerd: ${package.name}\nModules geselecteerd: ${selectedModules}`;
+        const explicitMessage = `Pakket geselecteerd: ${package.name}\nModules geselecteerd: ${selectedModules}\nAdres: ${customer.address}\nPostcode: ${customer.postal}\nPlaats: ${customer.city}\nLand: ${customer.country}\nKVK: ${customer.kvk}`;
 
         fetch(crmUrl, {
           method: 'POST',
@@ -412,6 +429,11 @@ app.post('/api/checkout', async (req, res) => {
             message: explicitMessage,
             feature: package.name,
             deal_waarde: amountStr,
+            kvk: customer.kvk,
+            adres: customer.address,
+            postcode: customer.postal,
+            plaats: customer.city,
+            land: customer.country,
             source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
             external_id: payment.id,
             utm: utms || {}
@@ -456,7 +478,8 @@ app.post('/api/webhook', async (req, res) => {
       await db.markPaymentProcessed(paymentId);
 
       console.log('Payment PAID. Processing Won lead...');
-      const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId } = payment.metadata;
+      const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId,
+              businessAddress, businessPostal, businessCity, businessCountry, kvkNumber } = payment.metadata;
       
       console.log(`Lead Info: ${customerName} | ${businessName} | ${customerEmail}`);
 
@@ -501,7 +524,7 @@ app.post('/api/webhook', async (req, res) => {
       if (crmUrl) {
         console.log('Sending lead to CRM webhook:', crmUrl);
         
-        const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}`;
+        const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}\nAdres: ${businessAddress || ''}\nPostcode: ${businessPostal || ''}\nPlaats: ${businessCity || ''}\nLand: ${businessCountry || ''}\nKVK: ${kvkNumber || ''}`;
 
         try {
           await fetch(crmUrl, {
@@ -524,6 +547,11 @@ app.post('/api/webhook', async (req, res) => {
               message: explicitMessage,
               feature: packageId,
               deal_waarde: yearlyAmount,
+              kvk: kvkNumber || '',
+              adres: businessAddress || '',
+              postcode: businessPostal || '',
+              plaats: businessCity || '',
+              land: businessCountry || '',
               source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
               external_id: paymentId,
               utm: utms || {}

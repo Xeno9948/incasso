@@ -74,10 +74,11 @@ async function createRelation(customerData) {
        Phone: customerData.customerPhone,
        Website: customerData.website,
        Status: 'C', // Customer
-       AddressLine1: '', // Would need more fields in checkout to populate
-       Postcode: '',
-       City: '',
-       Country: 'NL',
+       AddressLine1: customerData.businessAddress || '',
+       Postcode: customerData.businessPostal || '',
+       City: customerData.businessCity || '',
+       Country: customerData.businessCountry || 'NL',
+       ChamberOfCommerce: customerData.kvkNumber || '',
        Language: 'NL'
     };
 
