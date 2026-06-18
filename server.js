@@ -3,6 +3,8 @@ const { createMollieClient } = require('@mollie/api-client');
 const cors = require('cors');
 const QRCode = require('qrcode');
 const exact = require('./exact');
+const kiyoh = require('./kiyoh');
+const opdracht = require('./opdracht');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
 const nodemailer = require('nodemailer');
@@ -17,7 +19,7 @@ const db = require('./db');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // ─── SMTP EMAIL HELPER ────────────────────────────────────────────────────────
-async function sendInternalNotification(metadata) {
+async function getSmtpTransporter() {
   const config = await getConfig();
 
   const smtpHost = config.smtpHost || process.env.SMTP_HOST;
@@ -25,12 +27,9 @@ async function sendInternalNotification(metadata) {
   const smtpUser = config.smtpUser || process.env.SMTP_USER;
   const smtpPass = config.smtpPass || process.env.SMTP_PASS;
   const smtpFrom = config.smtpFrom || smtpUser;
-  const smtpTo   = config.smtpTo   || 'info@klantenvertelen.nl';
+  const smtpTo   = config.smtpTo   || 'info@klantenvertellen.nl';
 
-  if (!smtpHost || !smtpUser || !smtpPass) {
-    console.log('SMTP not configured — skipping internal notification email.');
-    return;
-  }
+  if (!smtpHost || !smtpUser || !smtpPass) return null;
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
@@ -39,9 +38,36 @@ async function sendInternalNotification(metadata) {
     auth: { user: smtpUser, pass: smtpPass }
   });
 
+  return { transporter, from: `"Kiyoh Betalingen" <${smtpFrom}>`, to: smtpTo };
+}
+
+async function sendInternalNotification(metadata) {
+  const mailer = await getSmtpTransporter();
+  if (!mailer) {
+    console.log('SMTP not configured — skipping internal notification email.');
+    return;
+  }
+
   const { customerName, businessName, website, customerEmail, customerPhone,
           packageId, yearlyAmount, modulesList, description,
           businessAddress, businessPostal, businessCity, businessCountry, kvkNumber } = metadata;
+
+  const moduleArr = (modulesList || '').split(',').map(s => s.trim()).filter(Boolean);
+  const hasExtraModules = moduleArr.length > 0;
+
+  const extraModulesBlock = hasExtraModules ? `
+        <div style="margin-top:24px;padding:16px;background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;">
+          <strong style="color:#7a5b00;">⚠️ Extra modules nog activeren</strong>
+          <p style="margin:8px 0 0;color:#5a4400;font-size:14px;">
+            Deze klant heeft de volgende extra modules afgenomen die nog handmatig aangezet moeten worden in het Kiyoh-platform:
+          </p>
+          <ul style="margin:8px 0 0;color:#5a4400;font-size:14px;">
+            ${moduleArr.map(m => `<li>${m}</li>`).join('')}
+          </ul>
+        </div>
+      ` : '';
+
+  const kiyohBlock = '';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -70,6 +96,8 @@ async function sendInternalNotification(metadata) {
           <tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 0;color:#888;">Jaarbedrag</td><td style="padding:10px 0;font-weight:600;color:#68b03d;">€${yearlyAmount || '—'}</td></tr>
           <tr><td style="padding:10px 0;color:#888;">Omschrijving</td><td style="padding:10px 0;">${description || '—'}</td></tr>
         </table>
+        ${extraModulesBlock}
+        ${kiyohBlock}
 
         <div style="margin-top:24px;padding:16px;background:#f9f9f9;border-radius:8px;font-size:12px;color:#aaa;">
           Dit is een automatisch bericht van het Kiyoh betalingssysteem.
@@ -78,14 +106,51 @@ async function sendInternalNotification(metadata) {
     </div>
   `;
 
-  await transporter.sendMail({
-    from: `"Kiyoh Betalingen" <${smtpFrom}>`,
-    to: smtpTo,
+  await mailer.transporter.sendMail({
+    from: mailer.from,
+    to: mailer.to,
     subject: `✅ Nieuw abonnement: ${businessName || customerName} — ${packageId}`,
     html
   });
 
-  console.log(`Internal notification email sent to ${smtpTo}`);
+  console.log(`Internal notification email sent to ${mailer.to}`);
+}
+
+async function sendCustomerWelcome(metadata, signupUrl) {
+  const mailer = await getSmtpTransporter();
+  if (!mailer || !metadata.customerEmail) return;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#f58220;padding:24px 32px;border-radius:10px 10px 0 0;">
+        <h2 style="color:white;margin:0;">Welkom bij Kiyoh!</h2>
+      </div>
+      <div style="background:#fff;border:1px solid #eee;border-top:none;padding:32px;border-radius:0 0 10px 10px;font-size:14px;color:#333;">
+        <p>Hi ${metadata.customerName || ''},</p>
+        <p>Bedankt voor je aanmelding voor het <strong>${metadata.packageId}</strong>-pakket. Je betaling is binnen.</p>
+        ${signupUrl ? `
+          <p>Maak nu in één minuut je account aan — je gegevens staan al voor je klaar:</p>
+          <p style="text-align:center;margin:24px 0;">
+            <a href="${signupUrl}" style="background:#f58220;color:white;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">Account aanmaken</a>
+          </p>
+          <p style="font-size:12px;color:#888;word-break:break-all;">Of plak deze link in je browser: ${signupUrl}</p>
+        ` : `
+          <p>Ons team neemt binnen 1 werkdag contact op om je account in te richten.</p>
+        `}
+        <p>Vragen? Reageer gewoon op deze mail.</p>
+        <p style="margin-top:24px;">— Het Kiyoh team</p>
+      </div>
+    </div>
+  `;
+
+  await mailer.transporter.sendMail({
+    from: mailer.from,
+    to: metadata.customerEmail,
+    subject: 'Welkom bij Kiyoh — maak je account aan',
+    html
+  });
+
+  console.log(`Customer welcome email sent to ${metadata.customerEmail}`);
 }
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
@@ -387,6 +452,7 @@ app.post('/api/checkout', async (req, res) => {
         businessCity: customer.city,
         businessCountry: customer.country,
         kvkNumber: customer.kvk,
+        btwNumber: customer.btw || '',
         modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
         utms: mollieUtms
       }
@@ -563,11 +629,46 @@ app.post('/api/webhook', async (req, res) => {
         }
       }
 
+      // ─── BUILD KIYOH SIGNUP URL FOR CUSTOMER ──────────────────────────
+      let signupUrl = null;
+      if (!payment.metadata.invoice_id) {
+        try {
+          const cfg = await getConfig();
+          const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
+          signupUrl = kiyoh.buildSignupUrl(payment.metadata, base || undefined);
+        } catch (err) {
+          console.error('Failed to build Kiyoh signup URL:', err.message);
+        }
+      }
+
       // ─── SEND INTERNAL NOTIFICATION EMAIL ────────────────────────────
       try {
         await sendInternalNotification(payment.metadata);
       } catch (err) {
         console.error('Failed to send internal notification email:', err.message);
+      }
+
+      // ─── SEND CUSTOMER WELCOME / SETUP EMAIL ─────────────────────────
+      if (!payment.metadata.invoice_id) {
+        try {
+          await sendCustomerWelcome(payment.metadata, signupUrl);
+        } catch (err) {
+          console.error('Failed to send customer welcome email:', err.message);
+        }
+      }
+
+      // ─── SEND OPDRACHT-FORMULIER TO ACCOUNTANT ───────────────────────
+      if (!payment.metadata.invoice_id) {
+        try {
+          const mailer = await getSmtpTransporter();
+          if (mailer) {
+            await opdracht.sendToAccountant(payment.metadata, true, mailer);
+          } else {
+            console.log('SMTP not configured — skipping accountant opdracht-formulier.');
+          }
+        } catch (err) {
+          console.error('Failed to send opdracht-formulier to accountant:', err.message);
+        }
       }
 
       // ─── FIRE EXACT ONLINE RELATION CREATION (NEW CUSTOMERS) ──────────
@@ -737,7 +838,7 @@ app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
     const smtpUser = config.smtpUser || process.env.SMTP_USER;
     const smtpPass = config.smtpPass || process.env.SMTP_PASS;
     const smtpFrom = config.smtpFrom || smtpUser;
-    const smtpTo   = config.smtpTo   || 'info@klantenvertelen.nl';
+    const smtpTo   = config.smtpTo   || 'info@klantenvertellen.nl';
 
     if (!smtpHost || !smtpUser || !smtpPass) {
       return res.status(400).json({ error: 'SMTP instellingen zijn niet volledig ingevuld.' });
@@ -797,6 +898,21 @@ app.get('/api/exact/callback', async (req, res) => {
 });
 
 
+
+/**
+ * KIYOH SETUP LANDING — kept as a thin redirect to kiyoh.com/signup
+ * with the buyer's data prefilled, in case the welcome email link
+ * gets stripped or the customer asks for it again.
+ */
+app.get('/kiyoh-setup', async (req, res) => {
+  const cfg = await getConfig();
+  const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
+  // Pass through any prefilled query params they arrive with.
+  const params = new URLSearchParams(req.query);
+  const target = base || 'https://kiyoh.com/signup';
+  const url = params.toString() ? `${target}?${params.toString()}` : target;
+  res.redirect(url);
+});
 
 // Start Server
 app.listen(port, () => {

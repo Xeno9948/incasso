@@ -20,5 +20,7 @@
   "mollieDescription": "Kiyoh Abonnement: {PACKAGE}",
   "mollieTestMode": true,
   "mollieLiveKey": "",
-  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD"
+  "mollieTestKey": "test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD",
+
+  "kiyohSignupUrl": "https://kiyoh.com/signup"
 }

@@ -262,6 +262,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pName    = document.getElementById('customer-personal-name').value.trim();
     const bName    = document.getElementById('customer-business-name').value.trim();
     const kvk      = document.getElementById('customer-kvk').value.trim();
+    const btw      = document.getElementById('customer-btw').value.trim();
     const address  = document.getElementById('customer-street').value.trim();
     const postal   = document.getElementById('customer-postal').value.trim();
     const city     = document.getElementById('customer-city').value.trim();
@@ -320,7 +321,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, address, postal, city, country, website, email, phone }, utms })
+        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone }, utms })
       });
 
       if (!res.ok) throw new Error('Server error');
