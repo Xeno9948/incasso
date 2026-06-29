@@ -762,6 +762,22 @@ app.post('/api/subscribers/cancel', authMiddleware, async (req, res) => {
 
 // ─── DEALS / ORDER FORMS API ──────────────────────────────────────────────
 /**
+ * Merge admin overrides on top of Mollie's frozen metadata.
+ */
+async function mergedMetadata(payment) {
+  const base = payment.metadata || {};
+  const ov   = await db.getDealOverrides(payment.id);
+  return { ...base, ...(ov || {}) };
+}
+
+const EDITABLE_FIELDS = new Set([
+  'customerName', 'businessName', 'customerEmail', 'customerPhone', 'website',
+  'businessAddress', 'businessPostal', 'businessCity', 'businessCountry',
+  'kvkNumber', 'btwNumber',
+  'packageId', 'yearlyAmount', 'modulesList', 'description'
+]);
+
+/**
  * List the most recent paid first-year deals from Mollie with their
  * email-send history pulled from the DB email log.
  */
@@ -783,7 +799,11 @@ app.get('/api/deals', authMiddleware, async (req, res) => {
       if (deals.length >= limit) break;
     }
 
-    const logs = await db.getEmailLogForPayments(deals.map(d => d.id));
+    const ids = deals.map(d => d.id);
+    const [logs, overrides] = await Promise.all([
+      db.getEmailLogForPayments(ids),
+      db.getDealOverridesBatch(ids)
+    ]);
     for (const d of deals) {
       const entries = logs[d.id] || [];
       d.emailStatus = {
@@ -792,6 +812,8 @@ app.get('/api/deals', authMiddleware, async (req, res) => {
         accountant: pickLatest(entries, 'accountant')
       };
       d.emailHistory = entries;
+      d.overrides = overrides[d.id] || null;
+      d.metadata  = { ...d.metadata, ...(overrides[d.id] || {}) };
     }
 
     res.json(deals);
@@ -813,17 +835,43 @@ app.get('/api/deals/:id', authMiddleware, async (req, res) => {
     const mollieClient = await getMollieClient();
     const p = await mollieClient.payments.get(req.params.id);
     const logs = await db.getEmailLogForPayments([p.id]);
+    const overrides = await db.getDealOverrides(p.id);
     res.json({
       id: p.id,
       status: p.status,
       createdAt: p.createdAt,
       amount: p.amount,
       method: p.method,
-      metadata: p.metadata,
+      metadata: { ...(p.metadata || {}), ...overrides },
+      rawMetadata: p.metadata || {},
+      overrides,
       emailHistory: logs[p.id] || []
     });
   } catch (err) {
     res.status(404).json({ error: 'Payment not found', details: err.message });
+  }
+});
+
+/**
+ * Save admin overrides for a deal's klantgegevens. Body is a partial
+ * object with the fields to override. Stored separately so Mollie's
+ * frozen metadata stays intact.
+ */
+app.put('/api/deals/:id/metadata', authMiddleware, async (req, res) => {
+  try {
+    const incoming = req.body || {};
+    const clean = {};
+    for (const [k, v] of Object.entries(incoming)) {
+      if (EDITABLE_FIELDS.has(k)) clean[k] = (v == null) ? '' : String(v);
+    }
+    const existing = await db.getDealOverrides(req.params.id);
+    const merged = { ...existing, ...clean };
+    const ok = await db.saveDealOverrides(req.params.id, merged);
+    if (!ok) return res.status(500).json({ error: 'DB save failed (no DATABASE_URL?)' });
+    res.json({ ok: true, overrides: merged });
+  } catch (err) {
+    console.error('Save overrides error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -836,9 +884,10 @@ app.get('/api/deals/:id/opdracht.xlsx', authMiddleware, async (req, res) => {
     const p = await mollieClient.payments.get(req.params.id);
     if (!p.metadata) return res.status(400).send('No metadata on payment');
 
-    const xlsxBuffer = opdracht.fillXlsx(p.metadata, p.status === 'paid');
+    const meta = await mergedMetadata(p);
+    const xlsxBuffer = opdracht.fillXlsx(meta, p.status === 'paid');
 
-    const business = (p.metadata.businessName || p.metadata.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
+    const business = (meta.businessName || meta.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
     const filename = `Opdrachtformulier - ${business} - ${new Date(p.createdAt).toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -863,11 +912,12 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
     const p = await mollieClient.payments.get(req.params.id);
     if (!p.metadata) return res.status(400).json({ error: 'No metadata on payment' });
 
+    const meta = await mergedMetadata(p);
     const results = {};
 
     if (wanted.includes('internal')) {
       try {
-        await sendInternalNotification(p.metadata);
+        await sendInternalNotification(meta);
         results.internal = { status: 'sent' };
         await db.logEmail({ paymentId: p.id, type: 'internal',
           recipient: (await getConfig()).smtpTo || 'info@klantenvertellen.nl',
@@ -883,15 +933,15 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
       try {
         const cfg = await getConfig();
         const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
-        const signupUrl = kiyoh.buildSignupUrl(p.metadata, base || undefined);
-        await sendCustomerWelcome(p.metadata, signupUrl);
-        results.customer = { status: 'sent', recipient: p.metadata.customerEmail };
+        const signupUrl = kiyoh.buildSignupUrl(meta, base || undefined);
+        await sendCustomerWelcome(meta, signupUrl);
+        results.customer = { status: 'sent', recipient: meta.customerEmail };
         await db.logEmail({ paymentId: p.id, type: 'customer',
-          recipient: p.metadata.customerEmail, status: 'sent', source: 'manual' });
+          recipient: meta.customerEmail, status: 'sent', source: 'manual' });
       } catch (err) {
         results.customer = { status: 'failed', error: err.message };
         await db.logEmail({ paymentId: p.id, type: 'customer',
-          recipient: p.metadata.customerEmail, status: 'failed',
+          recipient: meta.customerEmail, status: 'failed',
           error: err.message, source: 'manual' });
       }
     }
@@ -900,7 +950,7 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
       try {
         const mailer = await getSmtpTransporter();
         if (!mailer) throw new Error('SMTP not configured');
-        await opdracht.sendToAccountant(p.metadata, p.status === 'paid', mailer);
+        await opdracht.sendToAccountant(meta, p.status === 'paid', mailer);
         results.accountant = { status: 'sent', recipient: 'administratie@kv-review.nl' };
         await db.logEmail({ paymentId: p.id, type: 'accountant',
           recipient: 'administratie@kv-review.nl', status: 'sent', source: 'manual' });

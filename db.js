@@ -44,6 +44,13 @@ if (DATABASE_URL) {
         CREATE INDEX IF NOT EXISTS idx_kiyoh_email_log_payment
         ON kiyoh_email_log (payment_id, sent_at DESC);
       `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS kiyoh_deal_overrides (
+          payment_id VARCHAR(50) PRIMARY KEY,
+          overrides JSONB NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
       console.log('Database initialized successfully.');
     } catch (err) {
       console.error('Failed to initialize database:', err);
@@ -170,6 +177,60 @@ async function getEmailLogForPayments(paymentIds) {
   }
 }
 
+/**
+ * Deal metadata overrides — saved per Mollie payment_id and merged on
+ * top of payment.metadata whenever the admin reads a deal, resends a
+ * mail, or downloads the opdrachtformulier. Used to backfill fields
+ * (KVK, BTW, address, etc.) for deals paid before those fields existed.
+ */
+async function getDealOverrides(paymentId) {
+  if (!pool) return {};
+  try {
+    const res = await pool.query(
+      `SELECT overrides FROM kiyoh_deal_overrides WHERE payment_id = $1`,
+      [paymentId]
+    );
+    return res.rows[0] ? res.rows[0].overrides : {};
+  } catch (err) {
+    console.error('Error reading deal overrides:', err.message);
+    return {};
+  }
+}
+
+async function getDealOverridesBatch(paymentIds) {
+  if (!pool || !paymentIds.length) return {};
+  try {
+    const res = await pool.query(
+      `SELECT payment_id, overrides FROM kiyoh_deal_overrides
+       WHERE payment_id = ANY($1::varchar[])`,
+      [paymentIds]
+    );
+    const out = {};
+    for (const row of res.rows) out[row.payment_id] = row.overrides;
+    return out;
+  } catch (err) {
+    console.error('Error reading deal overrides batch:', err.message);
+    return {};
+  }
+}
+
+async function saveDealOverrides(paymentId, overrides) {
+  if (!pool) return false;
+  try {
+    await pool.query(
+      `INSERT INTO kiyoh_deal_overrides (payment_id, overrides, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (payment_id) DO UPDATE
+         SET overrides = EXCLUDED.overrides, updated_at = NOW()`,
+      [paymentId, overrides]
+    );
+    return true;
+  } catch (err) {
+    console.error('Error saving deal overrides:', err.message);
+    return false;
+  }
+}
+
 module.exports = {
   loadSettings,
   saveSettings,
@@ -177,5 +238,8 @@ module.exports = {
   markPaymentProcessed,
   logEmail,
   getEmailLogForPayments,
+  getDealOverrides,
+  getDealOverridesBatch,
+  saveDealOverrides,
   isDbEnabled: !!pool
 };

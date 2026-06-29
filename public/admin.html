@@ -781,50 +781,50 @@ async function openDealDetail(paymentId) {
       </tr>`).join('');
 
     body.innerHTML = `
-      <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-        <div>
-          <h4 style="margin-top:0;">Klant</h4>
-          <p style="font-size:0.85rem;line-height:1.7;">
-            ${escapeHtml(m.customerName || '—')}<br>
-            ${escapeHtml(m.businessName || '')}<br>
-            KVK: ${escapeHtml(m.kvkNumber || '—')} ${m.btwNumber ? '· BTW: ' + escapeHtml(m.btwNumber) : ''}<br>
-            ${escapeHtml(m.businessAddress || '')}, ${escapeHtml(m.businessPostal || '')} ${escapeHtml(m.businessCity || '')}<br>
-            <a href="mailto:${escapeHtml(m.customerEmail||'')}">${escapeHtml(m.customerEmail||'')}</a> · ${escapeHtml(m.customerPhone||'')}
-          </p>
+      <div style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h4 style="margin:0;">Klantgegevens <span style="font-weight:400;color:#888;font-size:0.8rem;">— bewerk en sla op voordat je opnieuw verstuurt</span></h4>
+          ${d.overrides && Object.keys(d.overrides).length ? '<span style="font-size:0.7rem;color:#7a5b00;background:#fff3cd;padding:3px 8px;border-radius:10px;">handmatig aangevuld</span>' : ''}
         </div>
-        <div>
-          <h4 style="margin-top:0;">Order</h4>
-          <p style="font-size:0.85rem;line-height:1.7;">
-            Pakket: <strong>${escapeHtml(m.packageId||'—')}</strong><br>
-            Jaarbedrag: <strong style="color:#68b03d;">€${escapeHtml(m.yearlyAmount||'—')}</strong><br>
-            Modules: ${escapeHtml(m.modulesList||'Geen')}<br>
-            Mollie ID: <code style="font-size:0.75rem;">${paymentId}</code>
-          </p>
+        ${dealField(paymentId, 'customerName',    'Contactpersoon', m)}
+        ${dealField(paymentId, 'businessName',    'Bedrijfsnaam',   m)}
+        ${dealField(paymentId, 'kvkNumber',       'KVK-nummer',     m)}
+        ${dealField(paymentId, 'btwNumber',       'BTW-nummer',     m)}
+        ${dealField(paymentId, 'businessAddress', 'Adres',          m)}
+        ${dealField(paymentId, 'businessPostal',  'Postcode',       m)}
+        ${dealField(paymentId, 'businessCity',    'Plaats',         m)}
+        ${dealField(paymentId, 'businessCountry', 'Land',           m)}
+        ${dealField(paymentId, 'customerEmail',   'E-mail',         m)}
+        ${dealField(paymentId, 'customerPhone',   'Telefoon',       m)}
+        ${dealField(paymentId, 'website',         'Website',        m)}
+
+        <h4 style="margin-top:24px;">Order</h4>
+        ${dealField(paymentId, 'packageId',     'Pakket',     m)}
+        ${dealField(paymentId, 'yearlyAmount',  'Jaarbedrag', m)}
+        ${dealField(paymentId, 'modulesList',   'Modules (komma-gescheiden)', m)}
+        <p style="font-size:0.75rem;color:#888;margin:6px 0 16px;">Mollie ID: <code>${paymentId}</code></p>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+          <button class="save-btn" style="background:#68b03d;" onclick="saveDealOverrides('${paymentId}')"><i class="fas fa-save"></i> Klantgegevens opslaan</button>
+          <button class="save-btn" onclick="resendDeal('${paymentId}',['internal'])"><i class="fas fa-envelope"></i> Intern opnieuw</button>
+          <button class="save-btn" onclick="resendDeal('${paymentId}',['customer'])"><i class="fas fa-user"></i> Klant opnieuw</button>
+          <button class="save-btn" onclick="resendDeal('${paymentId}',['accountant'])"><i class="fas fa-file-invoice"></i> Boekhouder opnieuw</button>
+          <button class="save-btn" style="background:#555;" onclick="resendDeal('${paymentId}',['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i> Alle 3 opnieuw</button>
+          <button class="save-btn" style="background:#1a1a1a;" onclick="downloadOpdracht(null,'${paymentId}')"><i class="fas fa-file-excel"></i> Opdrachtformulier downloaden</button>
         </div>
-        <div style="grid-column:1/-1;">
-          <h4>Acties</h4>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="save-btn" onclick="resendDeal('${paymentId}',['internal'])"><i class="fas fa-envelope"></i> Intern opnieuw</button>
-            <button class="save-btn" onclick="resendDeal('${paymentId}',['customer'])"><i class="fas fa-user"></i> Klant opnieuw</button>
-            <button class="save-btn" onclick="resendDeal('${paymentId}',['accountant'])"><i class="fas fa-file-invoice"></i> Boekhouder opnieuw</button>
-            <button class="save-btn" style="background:#555;" onclick="resendDeal('${paymentId}',['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i> Alle 3 opnieuw</button>
-            <button class="save-btn" style="background:#1a1a1a;" onclick="downloadOpdracht(null,'${paymentId}')"><i class="fas fa-file-excel"></i> Opdrachtformulier downloaden</button>
-          </div>
-        </div>
-        <div style="grid-column:1/-1;">
-          <h4>E-mail historie</h4>
-          ${history ? `
-            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
-              <thead><tr style="background:#fafafa;text-align:left;">
-                <th style="padding:8px 12px;">Wanneer</th>
-                <th style="padding:8px 12px;">Type</th>
-                <th style="padding:8px 12px;">Naar</th>
-                <th style="padding:8px 12px;">Status</th>
-                <th style="padding:8px 12px;">Notitie</th>
-              </tr></thead>
-              <tbody>${history}</tbody>
-            </table>` : '<p style="color:#888;">Nog geen verzendingen gelogd.</p>'}
-        </div>
+
+        <h4 style="margin-top:24px;">E-mail historie</h4>
+        ${history ? `
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead><tr style="background:#fafafa;text-align:left;">
+              <th style="padding:8px 12px;">Wanneer</th>
+              <th style="padding:8px 12px;">Type</th>
+              <th style="padding:8px 12px;">Naar</th>
+              <th style="padding:8px 12px;">Status</th>
+              <th style="padding:8px 12px;">Notitie</th>
+            </tr></thead>
+            <tbody>${history}</tbody>
+          </table>` : '<p style="color:#888;">Nog geen verzendingen gelogd.</p>'}
       </div>`;
   } catch (err) {
     body.innerHTML = '<p style="padding:20px;color:#e74c3c;">Kon deal niet laden.</p>';
@@ -862,9 +862,43 @@ async function resendDeal(paymentId, types) {
   }
 }
 
+function dealField(paymentId, key, label, m) {
+  const val = (m && m[key] != null) ? m[key] : '';
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin:6px 0;">
+      <label style="flex:0 0 180px;font-size:0.78rem;color:#666;">${label}</label>
+      <input type="text" id="deal-${paymentId}-${key}" value="${escapeHtml(val)}"
+        class="input-field" style="flex:1;padding:8px 10px;font-size:0.85rem;">
+    </div>`;
+}
+
+async function saveDealOverrides(paymentId) {
+  const keys = ['customerName','businessName','customerEmail','customerPhone','website',
+                'businessAddress','businessPostal','businessCity','businessCountry',
+                'kvkNumber','btwNumber','packageId','yearlyAmount','modulesList'];
+  const body = {};
+  for (const k of keys) {
+    const el = document.getElementById('deal-' + paymentId + '-' + k);
+    if (el) body[k] = el.value.trim();
+  }
+  try {
+    const res = await fetch('/api/deals/' + paymentId + '/metadata', {
+      method: 'PUT',
+      headers: { 'Content-Type':'application/json', 'Authorization': password },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'save failed');
+    alert('Klantgegevens opgeslagen. Resend / download gebruikt nu deze waarden.');
+    fetchDeals();
+    openDealDetail(paymentId);
+  } catch (err) {
+    alert('Opslaan mislukt: ' + err.message);
+  }
+}
+
 async function downloadOpdracht(ev, paymentId) {
   if (ev) ev.preventDefault();
-  // Need to send auth header → fetch as blob, then trigger download.
   try {
     const res = await fetch(`/api/deals/${paymentId}/opdracht.xlsx`, { headers:{ 'Authorization': password }});
     if (!res.ok) throw new Error('download failed');
