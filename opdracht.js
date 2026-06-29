@@ -1,195 +1,157 @@
 const fs = require('fs');
 const path = require('path');
+const XLSX = require('xlsx');
 
 /**
  * Opdracht-formulier filler + accountant delivery.
  *
- * Reads the CSV template "Opdracht formulier - Opdracht.csv" in the
- * project root, fills in the values from the Mollie payment metadata,
- * converts to .xlsx (with the same column layout) and emails it to
- * the accountant.
+ * Loads the master Excel template ("Opdracht formulier.xlsx"), writes
+ * only the data cells from Mollie payment metadata, and ships the
+ * resulting workbook to administratie@kv-review.nl as an attachment.
+ * All styling, merged cells, dropdown lookups (sheet "Data") and
+ * formulas stay intact.
+ *
+ * Cell map below mirrors the actual layout of the "Opdracht" sheet.
  */
 
-const TEMPLATE_PATH = path.join(__dirname, 'Opdracht formulier - Opdracht.csv');
+const TEMPLATE_PATH = path.join(__dirname, 'Opdracht formulier.xlsx');
 const ACCOUNTANT_EMAIL = 'administratie@kv-review.nl';
 
-// Module names from the form's "Prijs inclusief" section. We tick these
-// when the corresponding module appears in the customer's order.
-// Default invitation allowance per package (used to fill the
-// "Uitnodigingen per maand" cell on the opdrachtformulier).
-const PACKAGE_INVITES = {
-  go: 150,
-  pro: 300,
-  premium: 3000
-};
+// Default invitation allowance per package id (matches the pricing config).
+const PACKAGE_INVITES = { go: 150, pro: 300, premium: 3000 };
 
-const FEATURE_LABELS = [
-  'Easy Click Reviews',
-  'Easy Invite Link',
-  'Product Reviews',
-  'Reviewsplit',
-  'XML-feed',
-  'Listings',
-  'Filter Question',
-  'BCC',
-  'Widget Collectie',
-  'API Integratie'
+// Map module aliases (lowercased, alphanum only) → the corresponding
+// "Prijs inclusief" checkbox label on the opdracht-formulier.
+const FEATURE_CHECKBOXES = [
+  { cell: 'C39', labels: ['easyclickmodule', 'easyclickreviews', 'easyclick'] },
+  { cell: 'E39', labels: ['personalinvitelink', 'easyinvitelink', 'invitelink'] },
+  { cell: 'C41', labels: ['productreviews'] },
+  { cell: 'E41', labels: ['reviewsplit'] },
+  { cell: 'C42', labels: ['xmlfeedintegratie', 'xmlfeed'] },
+  { cell: 'E42', labels: ['listings'] },
+  { cell: 'C43', labels: ['filterquestion'] },
+  { cell: 'E43', labels: ['bcc'] },
+  { cell: 'C44', labels: ['widgetcollectie'] },
+  { cell: 'E44', labels: ['apiintegratie', 'apiintegration'] }
 ];
 
 function normalize(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /**
- * Parse a CSV line respecting quoted fields with embedded commas/newlines.
- * Returns array of cells. We only need round-tripping, not full RFC 4180.
+ * Excel serial date number for a JS Date (1900 date system, matching
+ * what Excel/Google Sheets uses, including the 1900-02-29 bug).
  */
-function csvEscape(val) {
-  if (val == null) return '';
-  const s = String(val);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+function toExcelDate(d) {
+  const epoch = Date.UTC(1899, 11, 30); // 1899-12-30
+  return Math.floor((d.getTime() - epoch) / 86400000);
 }
 
 /**
- * Build a filled CSV string from the template, replacing target cells
- * with values from the payment.
- *
- * The template uses a label-in-column-B / value-in-column-C layout
- * (1-indexed: column 2 → label, column 3 → value). For the feature
- * checkbox rows the layout is:
- *   col 3 = TRUE/FALSE, col 4 = label, col 5 = TRUE/FALSE, col 6 = label
+ * Split a single street string like "Hoofdstraat 1A" into the parts
+ * the address line on the form expects. We keep them joined here since
+ * the form has a single "Adres" cell, but expose the split for future use.
  */
-function fillTemplate(metadata, paid) {
-  const raw = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const rows = parseCsv(raw);
+function fullAddress(metadata) {
+  return metadata.businessAddress || '';
+}
+
+/**
+ * Set a cell value while preserving its existing style/format.
+ */
+function setCell(ws, addr, value, type) {
+  const existing = ws[addr] || {};
+  const cell = { ...existing, v: value, t: type };
+  // Drop any cached formatted string so Excel/Sheets re-renders it.
+  delete cell.w;
+  // For booleans we also wipe formulas defensively.
+  if (type === 'b') delete cell.f;
+  ws[addr] = cell;
+}
+
+function setText(ws, addr, value)   { setCell(ws, addr, String(value || ''), 's'); }
+function setNumber(ws, addr, value) { setCell(ws, addr, Number(value) || 0, 'n'); }
+function setBool(ws, addr, value)   { setCell(ws, addr, !!value, 'b'); }
+
+/**
+ * Build the filled workbook as a Buffer.
+ */
+function fillXlsx(metadata, paid) {
+  if (!fs.existsSync(TEMPLATE_PATH)) {
+    throw new Error(`Template not found: ${TEMPLATE_PATH}`);
+  }
+
+  const wb = XLSX.readFile(TEMPLATE_PATH, { cellStyles: true, cellNF: true });
+  const ws = wb.Sheets['Opdracht'] || wb.Sheets[wb.SheetNames[0]];
+  if (!ws) throw new Error('No "Opdracht" sheet in template');
+
+  // ─── Account gegevens ─────────────────────────────────────────────
+  setText(ws, 'C4', metadata.businessName || metadata.customerName);
+  setText(ws, 'C5', metadata.customerEmail);
+  setText(ws, 'C6', metadata.customerEmail);
+  setText(ws, 'C7', metadata.website);
+
+  // Bron row: tick "Aanmelding" (C8), leave the rest false.
+  setBool(ws, 'C8', true);
+  setBool(ws, 'E8', false);
+  setBool(ws, 'C9', false);
+  setBool(ws, 'E9', false);
+  setBool(ws, 'C11', false);
+  setBool(ws, 'E11', false);
+
+  // ─── Gebruikers gegevens ──────────────────────────────────────────
+  setText(ws, 'C14', fullAddress(metadata));
+  setText(ws, 'C15', metadata.businessPostal);
+  setText(ws, 'C16', metadata.businessCity);
+  setText(ws, 'C17', metadata.customerName);
+  setText(ws, 'C18', metadata.customerPhone);
+  // C19 = 2e telefoonnummer (niet uitgevraagd in checkout)
+
+  // ─── Factuurgegevens ──────────────────────────────────────────────
+  setText(ws, 'C22', metadata.businessName);
+  setText(ws, 'C23', metadata.kvkNumber);
+  setText(ws, 'C24', metadata.btwNumber);
+  setText(ws, 'C25', metadata.customerName);
 
   const yearly = parseFloat(metadata.yearlyAmount || '0');
-  const yearlyStr = `€${yearly.toFixed(2).replace('.', ',')}`;
+  setNumber(ws, 'C26', yearly);
+  // F27 = Eenmalige kosten — niet gebruikt
+  // C28 / C29 = facturatie tel/email — niet uitgevraagd
 
+  // ─── Pakket ───────────────────────────────────────────────────────
+  setText(ws, 'C32', metadata.businessName || metadata.customerName); // Label
+  setText(ws, 'C33', metadata.packageId);                              // Pakket
+
+  const invites = PACKAGE_INVITES[normalize(metadata.packageId)];
+  if (invites) setNumber(ws, 'C35', invites);
+  setText(ws, 'C36', '12 maanden');
+
+  // ─── Prijs inclusief: tick matching modules ───────────────────────
   const selected = (metadata.modulesList || '')
-    .split(',')
-    .map(s => normalize(s))
-    .filter(Boolean);
-
-  const packageKey = normalize(metadata.packageId);
-  const invitesPerMonth = PACKAGE_INVITES[packageKey] || '';
-
-  const fieldMap = {
-    'Accountnaam': metadata.businessName || metadata.customerName || '',
-    'Gebruikersnaam': metadata.customerEmail || '',
-    'E-mailadres voor klanten': metadata.customerEmail || '',
-    'Website': metadata.website || '',
-    'Adres': metadata.businessAddress || '',
-    'Postcode': metadata.businessPostal || '',
-    'Verstigingsplaats': metadata.businessCity || '',
-    'Naam contactpersoon': metadata.customerName || '',
-    'Telefoonnummer voor klanten': metadata.customerPhone || '',
-    'Factuur bedrijfsnaam': metadata.businessName || '',
-    'KVK': metadata.kvkNumber || '',
-    'BTW-nummer': metadata.btwNumber || '',
-    'Factuur ter attentie van': metadata.customerName || '',
-    'Factuurbedrag (per jaar), let op branche afspraak': yearlyStr,
-    'Pakket': metadata.packageId || '',
-    'Label': metadata.businessName || metadata.customerName || '',
-    'Uitnodigingen per maand': invitesPerMonth ? String(invitesPerMonth) : '',
-    'Looptijd': '12 maanden'
-  };
-
-  for (const cells of rows) {
-    while (cells.length < 7) cells.push('');
-
-    const label = cells[1];
-
-    if (label && fieldMap.hasOwnProperty(label)) {
-      cells[2] = fieldMap[label];
-    }
-
-    if (label === 'Bron') {
-      cells[2] = 'TRUE';
-      cells[4] = 'FALSE';
-    }
-
-    const leftFeature  = cells[3];
-    const rightFeature = cells[5];
-    if (FEATURE_LABELS.includes(leftFeature) || FEATURE_LABELS.includes(rightFeature)) {
-      if (leftFeature) {
-        cells[2] = selected.includes(normalize(leftFeature)) ? 'TRUE' : 'FALSE';
-      }
-      if (rightFeature) {
-        cells[4] = selected.includes(normalize(rightFeature)) ? 'TRUE' : 'FALSE';
-      }
-    }
-
-    if (label === 'Datum') {
-      const d = new Date();
-      cells[2] = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
-    }
-
-    if (label && label.startsWith('Toelichting factuur')) {
-      cells[2] = paid ? 'Eerste jaarbedrag betaald via Mollie' : 'Nog niet betaald';
-    }
+    .split(',').map(s => normalize(s)).filter(Boolean);
+  for (const fc of FEATURE_CHECKBOXES) {
+    const on = fc.labels.some(lbl => selected.includes(lbl));
+    setBool(ws, fc.cell, on);
   }
 
-  return rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  // ─── Toelichting factuur ──────────────────────────────────────────
+  setText(ws, 'C45', paid
+    ? 'Eerste jaarbedrag betaald via Mollie'
+    : 'Nog niet betaald');
+
+  // ─── Product verkocht ─────────────────────────────────────────────
+  setNumber(ws, 'C58', toExcelDate(new Date())); // Datum
+  setText(ws, 'C59', 'Systeem');                 // Verkoper
+
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx', cellStyles: true });
 }
 
 /**
- * Full CSV parser that respects multi-line quoted cells.
- */
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; }
-      else if (ch === '"') { inQuotes = false; }
-      else { cur += ch; }
-    } else {
-      if (ch === '"') { inQuotes = true; }
-      else if (ch === ',') { row.push(cur); cur = ''; }
-      else if (ch === '\r') { /* skip */ }
-      else if (ch === '\n') { row.push(cur); cur = ''; rows.push(row); row = []; }
-      else { cur += ch; }
-    }
-  }
-  if (cur.length > 0 || row.length > 0) { row.push(cur); rows.push(row); }
-  return rows;
-}
-
-/**
- * Build an .xlsx Buffer from the filled rows so the accountant gets a
- * native Excel file (which also opens cleanly in Google Sheets).
- */
-function buildXlsx(filledCsv) {
-  const XLSX = require('xlsx');
-  const rows = parseCsv(filledCsv);
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  // Set sensible column widths so the form is readable.
-  ws['!cols'] = [
-    { wch: 6 }, { wch: 32 }, { wch: 32 }, { wch: 22 },
-    { wch: 22 }, { wch: 22 }, { wch: 12 }
-  ];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Opdracht');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-}
-
-/**
- * Main entry point: fill template, deliver to accountant as Excel.
- *
- * @param {object} metadata - Mollie payment.metadata
- * @param {boolean} paid    - whether the first payment is settled
- * @param {object} mailer   - { transporter, from } pre-built nodemailer
+ * Main entry point: fill the template, email as attachment.
  */
 async function sendToAccountant(metadata, paid, mailer) {
-  const filled = fillTemplate(metadata, paid);
-  const xlsxBuffer = buildXlsx(filled);
+  const xlsxBuffer = fillXlsx(metadata, paid);
 
   const business = (metadata.businessName || metadata.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
   const fileName = `Opdrachtformulier - ${business} - ${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -209,8 +171,7 @@ async function sendToAccountant(metadata, paid, mailer) {
       </table>
       <p style="margin-top:20px;">Het ingevulde opdrachtformulier zit als Excel-bijlage bij deze mail.</p>
       <p style="font-size:12px;color:#aaa;margin-top:24px;">Automatisch verstuurd door het Kiyoh betalingssysteem.</p>
-    </div>
-  `;
+    </div>`;
 
   await mailer.transporter.sendMail({
     from: mailer.from,
@@ -229,6 +190,5 @@ async function sendToAccountant(metadata, paid, mailer) {
 
 module.exports = {
   sendToAccountant,
-  fillTemplate,
-  buildXlsx
+  fillXlsx
 };
