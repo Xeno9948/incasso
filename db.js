@@ -28,6 +28,22 @@ if (DATABASE_URL) {
           processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS kiyoh_email_log (
+          id SERIAL PRIMARY KEY,
+          payment_id VARCHAR(50) NOT NULL,
+          email_type VARCHAR(20) NOT NULL,
+          recipient VARCHAR(255),
+          status VARCHAR(20) NOT NULL,
+          error TEXT,
+          source VARCHAR(20) DEFAULT 'webhook',
+          sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_kiyoh_email_log_payment
+        ON kiyoh_email_log (payment_id, sent_at DESC);
+      `);
       console.log('Database initialized successfully.');
     } catch (err) {
       console.error('Failed to initialize database:', err);
@@ -113,10 +129,53 @@ async function markPaymentProcessed(paymentId) {
   }
 }
 
+/**
+ * Email log helpers — tracks every internal/customer/accountant
+ * email send tied to a Mollie payment so the admin UI can show
+ * what was sent, when, and whether it succeeded.
+ */
+async function logEmail({ paymentId, type, recipient, status, error, source }) {
+  if (!pool) return null;
+  try {
+    const res = await pool.query(
+      `INSERT INTO kiyoh_email_log (payment_id, email_type, recipient, status, error, source)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, sent_at`,
+      [paymentId, type, recipient || null, status, error || null, source || 'webhook']
+    );
+    return res.rows[0];
+  } catch (err) {
+    console.error('Error writing email log:', err.message);
+    return null;
+  }
+}
+
+async function getEmailLogForPayments(paymentIds) {
+  if (!pool || !paymentIds.length) return {};
+  try {
+    const res = await pool.query(
+      `SELECT payment_id, email_type, recipient, status, error, source, sent_at
+       FROM kiyoh_email_log
+       WHERE payment_id = ANY($1::varchar[])
+       ORDER BY sent_at DESC`,
+      [paymentIds]
+    );
+    const out = {};
+    for (const row of res.rows) {
+      (out[row.payment_id] = out[row.payment_id] || []).push(row);
+    }
+    return out;
+  } catch (err) {
+    console.error('Error reading email log:', err.message);
+    return {};
+  }
+}
+
 module.exports = {
   loadSettings,
   saveSettings,
   isPaymentProcessed,
   markPaymentProcessed,
+  logEmail,
+  getEmailLogForPayments,
   isDbEnabled: !!pool
 };
