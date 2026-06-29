@@ -836,8 +836,7 @@ app.get('/api/deals/:id/opdracht.xlsx', authMiddleware, async (req, res) => {
     const p = await mollieClient.payments.get(req.params.id);
     if (!p.metadata) return res.status(400).send('No metadata on payment');
 
-    const filled = opdracht.fillTemplate(p.metadata, p.status === 'paid');
-    const xlsxBuffer = opdracht.buildXlsx(filled);
+    const xlsxBuffer = opdracht.fillXlsx(p.metadata, p.status === 'paid');
 
     const business = (p.metadata.businessName || p.metadata.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
     const filename = `Opdrachtformulier - ${business} - ${new Date(p.createdAt).toISOString().slice(0, 10)}.xlsx`;
