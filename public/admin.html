@@ -199,6 +199,7 @@
         <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
         
         <div class="section-label">Overzicht</div>
+        <a href="#" onclick="showSection('deals', this)"><i class="fas fa-file-invoice"></i> Deals & Mails</a>
         <a href="#" onclick="showSection('subscribers', this)"><i class="fas fa-users"></i> Abonnementen</a>
         
         <div class="section-label">Publiceren</div>
@@ -415,6 +416,41 @@
         </div>
       </section>
 
+      <!-- Deals & Mails -->
+      <section id="section-deals" class="section">
+        <h2>Deals &amp; Mails</h2>
+        <p class="section-desc">Laatste betaalde deals via Mollie, met status van verstuurde e-mails en knoppen om opnieuw te versturen.</p>
+
+        <div class="item-card open">
+          <div class="item-card-body" style="padding: 0; display: block;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="background: #fafafa; border-bottom: 2px solid #eee; text-align: left;">
+                  <th style="padding: 12px 20px;">Datum</th>
+                  <th style="padding: 12px 20px;">Klant</th>
+                  <th style="padding: 12px 20px;">Pakket</th>
+                  <th style="padding: 12px 20px;">Bedrag</th>
+                  <th style="padding: 12px 20px;">E-mails</th>
+                  <th style="padding: 12px 20px; text-align: right;">Acties</th>
+                </tr>
+              </thead>
+              <tbody id="deals-table-body">
+                <tr><td colspan="6" style="padding: 40px; text-align: center; color: #888;"><i class="fas fa-spinner fa-spin"></i> Deals laden…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Detail panel -->
+        <div id="deal-detail" class="item-card" style="display:none; margin-top:24px;">
+          <div class="item-card-header" style="cursor:default;">
+            <strong id="deal-detail-title"></strong>
+            <button class="icon-btn" onclick="closeDealDetail()" style="float:right;"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="item-card-body" id="deal-detail-body" style="display:block;"></div>
+        </div>
+      </section>
+
       <!-- Subscribers -->
       <section id="section-subscribers" class="section">
         <h2>Abonnementen</h2>
@@ -584,6 +620,9 @@ function showSection(name, el) {
   if (name === 'subscribers') {
     fetchSubscribers();
   }
+  if (name === 'deals') {
+    fetchDeals();
+  }
   return false;
 }
 
@@ -648,6 +687,198 @@ async function cancelSubscription(customerId, subId) {
     }
   } catch (err) {
     alert('Fout bij maken van verbinding.');
+  }
+}
+
+
+// ─── DEALS & EMAIL LOG ────────────────────────────────────────────────────
+let dealsCache = [];
+
+async function fetchDeals() {
+  const tbody = document.getElementById('deals-table-body');
+  try {
+    const res = await fetch('/api/deals?limit=25', { headers: { 'Authorization': password } });
+    if (!res.ok) throw new Error('Failed to fetch');
+    const deals = await res.json();
+    dealsCache = deals;
+
+    if (!deals.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#888;">Geen betaalde deals gevonden.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = deals.map(d => {
+      const m = d.metadata || {};
+      const dt = new Date(d.createdAt).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `
+        <tr style="border-bottom:1px solid #eee;">
+          <td style="padding:12px 20px;white-space:nowrap;">${dt}</td>
+          <td style="padding:12px 20px;">
+            <strong style="display:block;">${escapeHtml(m.businessName || m.customerName || '—')}</strong>
+            <span style="font-size:0.75rem;color:#888;">${escapeHtml(m.customerEmail || '')}</span>
+          </td>
+          <td style="padding:12px 20px;">${escapeHtml(m.packageId || '—')}</td>
+          <td style="padding:12px 20px;">€${(d.amount && d.amount.value) || m.yearlyAmount || '—'}</td>
+          <td style="padding:12px 20px;">
+            ${badge(d.emailStatus.internal,   'Intern')}
+            ${badge(d.emailStatus.customer,   'Klant')}
+            ${badge(d.emailStatus.accountant, 'Boekh.')}
+          </td>
+          <td style="padding:12px 20px;text-align:right;white-space:nowrap;">
+            <button class="icon-btn" title="Bekijken" onclick="openDealDetail('${d.id}')"><i class="fas fa-eye"></i></button>
+            <a class="icon-btn" title="Opdrachtformulier downloaden"
+               href="/api/deals/${d.id}/opdracht.xlsx" data-auth-required="1" onclick="downloadOpdracht(event,'${d.id}')"><i class="fas fa-file-excel"></i></a>
+            <button class="icon-btn" title="Alle mails opnieuw versturen"
+               onclick="resendDeal('${d.id}', ['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i></button>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#e74c3c;">Fout bij laden van deals.</td></tr>';
+  }
+}
+
+function badge(entry, label) {
+  if (!entry) return `<span style="display:inline-block;font-size:0.7rem;padding:3px 8px;border-radius:10px;background:#eee;color:#888;margin-right:4px;">${label} · –</span>`;
+  const color = entry.status === 'sent' ? '#68b03d'
+              : entry.status === 'failed' ? '#e74c3c'
+              : '#888';
+  const bg    = entry.status === 'sent' ? '#e8f5e6'
+              : entry.status === 'failed' ? '#fce8e6'
+              : '#eee';
+  const dt = new Date(entry.sent_at).toLocaleString('nl-NL', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+  return `<span title="${label}: ${entry.status} (${dt})${entry.error ? ' — ' + entry.error.replace(/"/g, '') : ''}" 
+    style="display:inline-block;font-size:0.7rem;padding:3px 8px;border-radius:10px;background:${bg};color:${color};margin-right:4px;font-weight:600;">${label} · ${entry.status}</span>`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+async function openDealDetail(paymentId) {
+  const panel = document.getElementById('deal-detail');
+  const body  = document.getElementById('deal-detail-body');
+  const title = document.getElementById('deal-detail-title');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior:'smooth', block:'start' });
+  body.innerHTML = '<p style="padding:20px;color:#888;"><i class="fas fa-spinner fa-spin"></i> Laden…</p>';
+  title.textContent = paymentId;
+
+  try {
+    const res = await fetch('/api/deals/' + paymentId, { headers:{ 'Authorization': password }});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const m = d.metadata || {};
+    title.textContent = `${m.businessName || m.customerName || paymentId} — ${m.packageId || ''}`;
+
+    const history = (d.emailHistory || []).map(e => `
+      <tr>
+        <td style="padding:6px 12px;color:#888;white-space:nowrap;">${new Date(e.sent_at).toLocaleString('nl-NL')}</td>
+        <td style="padding:6px 12px;font-weight:600;">${e.email_type}</td>
+        <td style="padding:6px 12px;">${escapeHtml(e.recipient || '')}</td>
+        <td style="padding:6px 12px;color:${e.status==='sent'?'#68b03d':'#e74c3c'};font-weight:600;">${e.status}</td>
+        <td style="padding:6px 12px;color:#888;font-size:0.75rem;">${escapeHtml(e.error || '')} ${e.source ? `· ${e.source}` : ''}</td>
+      </tr>`).join('');
+
+    body.innerHTML = `
+      <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <h4 style="margin-top:0;">Klant</h4>
+          <p style="font-size:0.85rem;line-height:1.7;">
+            ${escapeHtml(m.customerName || '—')}<br>
+            ${escapeHtml(m.businessName || '')}<br>
+            KVK: ${escapeHtml(m.kvkNumber || '—')} ${m.btwNumber ? '· BTW: ' + escapeHtml(m.btwNumber) : ''}<br>
+            ${escapeHtml(m.businessAddress || '')}, ${escapeHtml(m.businessPostal || '')} ${escapeHtml(m.businessCity || '')}<br>
+            <a href="mailto:${escapeHtml(m.customerEmail||'')}">${escapeHtml(m.customerEmail||'')}</a> · ${escapeHtml(m.customerPhone||'')}
+          </p>
+        </div>
+        <div>
+          <h4 style="margin-top:0;">Order</h4>
+          <p style="font-size:0.85rem;line-height:1.7;">
+            Pakket: <strong>${escapeHtml(m.packageId||'—')}</strong><br>
+            Jaarbedrag: <strong style="color:#68b03d;">€${escapeHtml(m.yearlyAmount||'—')}</strong><br>
+            Modules: ${escapeHtml(m.modulesList||'Geen')}<br>
+            Mollie ID: <code style="font-size:0.75rem;">${paymentId}</code>
+          </p>
+        </div>
+        <div style="grid-column:1/-1;">
+          <h4>Acties</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="save-btn" onclick="resendDeal('${paymentId}',['internal'])"><i class="fas fa-envelope"></i> Intern opnieuw</button>
+            <button class="save-btn" onclick="resendDeal('${paymentId}',['customer'])"><i class="fas fa-user"></i> Klant opnieuw</button>
+            <button class="save-btn" onclick="resendDeal('${paymentId}',['accountant'])"><i class="fas fa-file-invoice"></i> Boekhouder opnieuw</button>
+            <button class="save-btn" style="background:#555;" onclick="resendDeal('${paymentId}',['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i> Alle 3 opnieuw</button>
+            <button class="save-btn" style="background:#1a1a1a;" onclick="downloadOpdracht(null,'${paymentId}')"><i class="fas fa-file-excel"></i> Opdrachtformulier downloaden</button>
+          </div>
+        </div>
+        <div style="grid-column:1/-1;">
+          <h4>E-mail historie</h4>
+          ${history ? `
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+              <thead><tr style="background:#fafafa;text-align:left;">
+                <th style="padding:8px 12px;">Wanneer</th>
+                <th style="padding:8px 12px;">Type</th>
+                <th style="padding:8px 12px;">Naar</th>
+                <th style="padding:8px 12px;">Status</th>
+                <th style="padding:8px 12px;">Notitie</th>
+              </tr></thead>
+              <tbody>${history}</tbody>
+            </table>` : '<p style="color:#888;">Nog geen verzendingen gelogd.</p>'}
+        </div>
+      </div>`;
+  } catch (err) {
+    body.innerHTML = '<p style="padding:20px;color:#e74c3c;">Kon deal niet laden.</p>';
+  }
+}
+
+function closeDealDetail() {
+  document.getElementById('deal-detail').style.display = 'none';
+}
+
+async function resendDeal(paymentId, types) {
+  const label = types.length === 3 ? 'alle 3 de mails' : types.join(', ');
+  if (!confirm(`Weet je zeker dat je ${label} opnieuw wilt versturen voor ${paymentId}?`)) return;
+
+  try {
+    const res = await fetch(`/api/deals/${paymentId}/resend`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': password },
+      body: JSON.stringify({ types })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'resend failed');
+
+    const summary = Object.entries(data.results).map(([k,v]) =>
+      `${k}: ${v.status === 'sent' ? '✅' : '❌ ' + (v.error||'')}`
+    ).join('\n');
+    alert('Resend voltooid:\n\n' + summary);
+
+    fetchDeals();
+    if (document.getElementById('deal-detail').style.display !== 'none') {
+      openDealDetail(paymentId);
+    }
+  } catch (err) {
+    alert('Fout bij opnieuw versturen: ' + err.message);
+  }
+}
+
+async function downloadOpdracht(ev, paymentId) {
+  if (ev) ev.preventDefault();
+  // Need to send auth header → fetch as blob, then trigger download.
+  try {
+    const res = await fetch(`/api/deals/${paymentId}/opdracht.xlsx`, { headers:{ 'Authorization': password }});
+    if (!res.ok) throw new Error('download failed');
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `opdracht-${paymentId}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Download mislukt: ' + err.message);
   }
 }
 

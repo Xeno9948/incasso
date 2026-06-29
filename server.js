@@ -644,16 +644,27 @@ app.post('/api/webhook', async (req, res) => {
       // ─── SEND INTERNAL NOTIFICATION EMAIL ────────────────────────────
       try {
         await sendInternalNotification(payment.metadata);
+        await db.logEmail({ paymentId: payment.id, type: 'internal',
+          recipient: (await getConfig()).smtpTo || 'info@klantenvertellen.nl',
+          status: 'sent', source: 'webhook' });
       } catch (err) {
         console.error('Failed to send internal notification email:', err.message);
+        await db.logEmail({ paymentId: payment.id, type: 'internal',
+          status: 'failed', error: err.message, source: 'webhook' });
       }
 
       // ─── SEND CUSTOMER WELCOME / SETUP EMAIL ─────────────────────────
       if (!payment.metadata.invoice_id) {
         try {
           await sendCustomerWelcome(payment.metadata, signupUrl);
+          await db.logEmail({ paymentId: payment.id, type: 'customer',
+            recipient: payment.metadata.customerEmail,
+            status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send customer welcome email:', err.message);
+          await db.logEmail({ paymentId: payment.id, type: 'customer',
+            recipient: payment.metadata.customerEmail,
+            status: 'failed', error: err.message, source: 'webhook' });
         }
       }
 
@@ -663,11 +674,19 @@ app.post('/api/webhook', async (req, res) => {
           const mailer = await getSmtpTransporter();
           if (mailer) {
             await opdracht.sendToAccountant(payment.metadata, true, mailer);
+            await db.logEmail({ paymentId: payment.id, type: 'accountant',
+              recipient: 'administratie@kv-review.nl',
+              status: 'sent', source: 'webhook' });
           } else {
             console.log('SMTP not configured — skipping accountant opdracht-formulier.');
+            await db.logEmail({ paymentId: payment.id, type: 'accountant',
+              status: 'skipped', error: 'SMTP not configured', source: 'webhook' });
           }
         } catch (err) {
           console.error('Failed to send opdracht-formulier to accountant:', err.message);
+          await db.logEmail({ paymentId: payment.id, type: 'accountant',
+            recipient: 'administratie@kv-review.nl',
+            status: 'failed', error: err.message, source: 'webhook' });
         }
       }
 
@@ -737,6 +756,167 @@ app.post('/api/subscribers/cancel', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Failed to cancel subscription:', error);
     res.status(500).json({ error: 'Mollie API Error', details: error.message });
+  }
+});
+
+
+// ─── DEALS / ORDER FORMS API ──────────────────────────────────────────────
+/**
+ * List the most recent paid first-year deals from Mollie with their
+ * email-send history pulled from the DB email log.
+ */
+app.get('/api/deals', authMiddleware, async (req, res) => {
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
+  try {
+    const mollieClient = await getMollieClient();
+    const deals = [];
+    for await (const p of mollieClient.payments.iterate()) {
+      if (p.status !== 'paid') continue;
+      if (!p.metadata || p.metadata.invoice_id) continue;
+      if (!p.metadata.customerEmail) continue;
+      deals.push({
+        id: p.id,
+        createdAt: p.createdAt,
+        amount: p.amount,
+        metadata: p.metadata
+      });
+      if (deals.length >= limit) break;
+    }
+
+    const logs = await db.getEmailLogForPayments(deals.map(d => d.id));
+    for (const d of deals) {
+      const entries = logs[d.id] || [];
+      d.emailStatus = {
+        internal:   pickLatest(entries, 'internal'),
+        customer:   pickLatest(entries, 'customer'),
+        accountant: pickLatest(entries, 'accountant')
+      };
+      d.emailHistory = entries;
+    }
+
+    res.json(deals);
+  } catch (err) {
+    console.error('Failed to fetch deals:', err);
+    res.status(500).json({ error: 'Mollie API Error', details: err.message });
+  }
+});
+
+function pickLatest(entries, type) {
+  return entries.find(e => e.email_type === type) || null;
+}
+
+/**
+ * Single-deal detail.
+ */
+app.get('/api/deals/:id', authMiddleware, async (req, res) => {
+  try {
+    const mollieClient = await getMollieClient();
+    const p = await mollieClient.payments.get(req.params.id);
+    const logs = await db.getEmailLogForPayments([p.id]);
+    res.json({
+      id: p.id,
+      status: p.status,
+      createdAt: p.createdAt,
+      amount: p.amount,
+      method: p.method,
+      metadata: p.metadata,
+      emailHistory: logs[p.id] || []
+    });
+  } catch (err) {
+    res.status(404).json({ error: 'Payment not found', details: err.message });
+  }
+});
+
+/**
+ * Download the filled opdrachtformulier for a deal as .xlsx.
+ */
+app.get('/api/deals/:id/opdracht.xlsx', authMiddleware, async (req, res) => {
+  try {
+    const mollieClient = await getMollieClient();
+    const p = await mollieClient.payments.get(req.params.id);
+    if (!p.metadata) return res.status(400).send('No metadata on payment');
+
+    const filled = opdracht.fillTemplate(p.metadata, p.status === 'paid');
+    const xlsxBuffer = opdracht.buildXlsx(filled);
+
+    const business = (p.metadata.businessName || p.metadata.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
+    const filename = `Opdrachtformulier - ${business} - ${new Date(p.createdAt).toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xlsxBuffer);
+  } catch (err) {
+    console.error('Opdracht download error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Resend one or more emails for a given payment.
+ * Body: { types: ['internal','customer','accountant'] }   (default = all)
+ */
+app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
+  const wanted = (req.body && Array.isArray(req.body.types) && req.body.types.length)
+    ? req.body.types
+    : ['internal', 'customer', 'accountant'];
+
+  try {
+    const mollieClient = await getMollieClient();
+    const p = await mollieClient.payments.get(req.params.id);
+    if (!p.metadata) return res.status(400).json({ error: 'No metadata on payment' });
+
+    const results = {};
+
+    if (wanted.includes('internal')) {
+      try {
+        await sendInternalNotification(p.metadata);
+        results.internal = { status: 'sent' };
+        await db.logEmail({ paymentId: p.id, type: 'internal',
+          recipient: (await getConfig()).smtpTo || 'info@klantenvertellen.nl',
+          status: 'sent', source: 'manual' });
+      } catch (err) {
+        results.internal = { status: 'failed', error: err.message };
+        await db.logEmail({ paymentId: p.id, type: 'internal',
+          status: 'failed', error: err.message, source: 'manual' });
+      }
+    }
+
+    if (wanted.includes('customer')) {
+      try {
+        const cfg = await getConfig();
+        const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
+        const signupUrl = kiyoh.buildSignupUrl(p.metadata, base || undefined);
+        await sendCustomerWelcome(p.metadata, signupUrl);
+        results.customer = { status: 'sent', recipient: p.metadata.customerEmail };
+        await db.logEmail({ paymentId: p.id, type: 'customer',
+          recipient: p.metadata.customerEmail, status: 'sent', source: 'manual' });
+      } catch (err) {
+        results.customer = { status: 'failed', error: err.message };
+        await db.logEmail({ paymentId: p.id, type: 'customer',
+          recipient: p.metadata.customerEmail, status: 'failed',
+          error: err.message, source: 'manual' });
+      }
+    }
+
+    if (wanted.includes('accountant')) {
+      try {
+        const mailer = await getSmtpTransporter();
+        if (!mailer) throw new Error('SMTP not configured');
+        await opdracht.sendToAccountant(p.metadata, p.status === 'paid', mailer);
+        results.accountant = { status: 'sent', recipient: 'administratie@kv-review.nl' };
+        await db.logEmail({ paymentId: p.id, type: 'accountant',
+          recipient: 'administratie@kv-review.nl', status: 'sent', source: 'manual' });
+      } catch (err) {
+        results.accountant = { status: 'failed', error: err.message };
+        await db.logEmail({ paymentId: p.id, type: 'accountant',
+          recipient: 'administratie@kv-review.nl', status: 'failed',
+          error: err.message, source: 'manual' });
+      }
+    }
+
+    res.json({ paymentId: p.id, results });
+  } catch (err) {
+    console.error('Resend error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
