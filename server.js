@@ -5,6 +5,7 @@ const QRCode = require('qrcode');
 const exact = require('./exact');
 const kiyoh = require('./kiyoh');
 const opdracht = require('./opdracht');
+const crm = require('./crm');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
 const nodemailer = require('nodemailer');
@@ -588,45 +589,22 @@ app.post('/api/webhook', async (req, res) => {
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       if (crmUrl) {
-        console.log('Sending lead to CRM webhook:', crmUrl);
-        
-        const explicitMessage = `Pakket geselecteerd: ${packageId}\nModules geselecteerd: ${modulesList || 'Geen extra modules'}\nAdres: ${businessAddress || ''}\nPostcode: ${businessPostal || ''}\nPlaats: ${businessCity || ''}\nLand: ${businessCountry || ''}\nKVK: ${kvkNumber || ''}`;
-
         try {
-          await fetch(crmUrl, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'User-Agent': 'Kiyoh-Webhook-Client/1.0'
-            },
-            body: JSON.stringify({
-              aanmelding_type: "Kiyoh Online Abonnement",
-              bedrijf: businessName || customerName,
-              contactpersoon: customerName,
-              website: website || '',
-              telefoon: customerPhone,
-              email: customerEmail,
-              collega: "Systeem",
-              status: "Won",
-              upsell: "NB",
-              product: "Kiyoh",
-              message: explicitMessage,
-              feature: packageId,
-              deal_waarde: yearlyAmount,
-              kvk: kvkNumber || '',
-              adres: businessAddress || '',
-              postcode: businessPostal || '',
-              plaats: businessCity || '',
-              land: businessCountry || '',
-              source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
-              external_id: paymentId,
-              utm: utms || {}
-            })
-          });
+          console.log('Sending lead to CRM webhook:', crmUrl);
+          await crm.sendWonLead(crmUrl, payment.metadata, paymentId);
           console.log('CRM webhook sent successfully!');
+          await db.logEmail({ paymentId, type: 'crm',
+            recipient: crmUrl, status: 'sent', source: 'webhook' });
         } catch (err) {
-          console.error('Failed to send CRM webhook:', err);
+          console.error('Failed to send CRM webhook:', err.message);
+          await db.logEmail({ paymentId, type: 'crm',
+            recipient: crmUrl, status: 'failed',
+            error: err.message, source: 'webhook' });
         }
+      } else {
+        console.warn('crmWebhookUrl not configured — CRM call skipped.');
+        await db.logEmail({ paymentId, type: 'crm',
+          status: 'skipped', error: 'crmWebhookUrl not configured', source: 'webhook' });
       }
 
       // ─── BUILD KIYOH SIGNUP URL FOR CUSTOMER ──────────────────────────
@@ -809,7 +787,8 @@ app.get('/api/deals', authMiddleware, async (req, res) => {
       d.emailStatus = {
         internal:   pickLatest(entries, 'internal'),
         customer:   pickLatest(entries, 'customer'),
-        accountant: pickLatest(entries, 'accountant')
+        accountant: pickLatest(entries, 'accountant'),
+        crm:        pickLatest(entries, 'crm')
       };
       d.emailHistory = entries;
       d.overrides = overrides[d.id] || null;
@@ -905,7 +884,7 @@ app.get('/api/deals/:id/opdracht.xlsx', authMiddleware, async (req, res) => {
 app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
   const wanted = (req.body && Array.isArray(req.body.types) && req.body.types.length)
     ? req.body.types
-    : ['internal', 'customer', 'accountant'];
+    : ['internal', 'customer', 'accountant', 'crm'];
 
   try {
     const mollieClient = await getMollieClient();
@@ -914,6 +893,22 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     const meta = await mergedMetadata(p);
     const results = {};
+
+    if (wanted.includes('crm')) {
+      const cfg = await getConfig();
+      const crmUrl = cfg.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      try {
+        if (!crmUrl) throw new Error('crmWebhookUrl not configured');
+        await crm.sendWonLead(crmUrl, meta, p.id);
+        results.crm = { status: 'sent', recipient: crmUrl };
+        await db.logEmail({ paymentId: p.id, type: 'crm',
+          recipient: crmUrl, status: 'sent', source: 'manual' });
+      } catch (err) {
+        results.crm = { status: 'failed', error: err.message };
+        await db.logEmail({ paymentId: p.id, type: 'crm',
+          recipient: crmUrl, status: 'failed', error: err.message, source: 'manual' });
+      }
+    }
 
     if (wanted.includes('internal')) {
       try {

@@ -723,13 +723,14 @@ async function fetchDeals() {
             ${badge(d.emailStatus.internal,   'Intern')}
             ${badge(d.emailStatus.customer,   'Klant')}
             ${badge(d.emailStatus.accountant, 'Boekh.')}
+            ${badge(d.emailStatus.crm,        'CRM')}
           </td>
           <td style="padding:12px 20px;text-align:right;white-space:nowrap;">
             <button class="icon-btn" title="Bekijken" onclick="openDealDetail('${d.id}')"><i class="fas fa-eye"></i></button>
             <a class="icon-btn" title="Opdrachtformulier downloaden"
                href="/api/deals/${d.id}/opdracht.xlsx" data-auth-required="1" onclick="downloadOpdracht(event,'${d.id}')"><i class="fas fa-file-excel"></i></a>
-            <button class="icon-btn" title="Alle mails opnieuw versturen"
-               onclick="resendDeal('${d.id}', ['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i></button>
+            <button class="icon-btn" title="Alle calls opnieuw versturen"
+               onclick="resendDeal('${d.id}', ['internal','customer','accountant','crm'])"><i class="fas fa-paper-plane"></i></button>
           </td>
         </tr>`;
     }).join('');
@@ -809,7 +810,8 @@ async function openDealDetail(paymentId) {
           <button class="save-btn" onclick="resendDeal('${paymentId}',['internal'])"><i class="fas fa-envelope"></i> Intern opnieuw</button>
           <button class="save-btn" onclick="resendDeal('${paymentId}',['customer'])"><i class="fas fa-user"></i> Klant opnieuw</button>
           <button class="save-btn" onclick="resendDeal('${paymentId}',['accountant'])"><i class="fas fa-file-invoice"></i> Boekhouder opnieuw</button>
-          <button class="save-btn" style="background:#555;" onclick="resendDeal('${paymentId}',['internal','customer','accountant'])"><i class="fas fa-paper-plane"></i> Alle 3 opnieuw</button>
+          <button class="save-btn" onclick="resendDeal('${paymentId}',['crm'])"><i class="fas fa-bullseye"></i> CRM opnieuw</button>
+          <button class="save-btn" style="background:#555;" onclick="resendDeal('${paymentId}',['internal','customer','accountant','crm'])"><i class="fas fa-paper-plane"></i> Alle 4 opnieuw</button>
           <button class="save-btn" style="background:#1a1a1a;" onclick="downloadOpdracht(null,'${paymentId}')"><i class="fas fa-file-excel"></i> Opdrachtformulier downloaden</button>
         </div>
 
