@@ -316,6 +316,10 @@
           <label>Webhook URL</label>
           <input type="url" id="crm-webhook-url" placeholder="https://hooks.zapier.com/...">
         </div>
+        <div class="field">
+          <label>Webhook Secret <span style="color:#888;font-weight:400;font-size:0.78rem;">(verstuurd als <code>X-Webhook-Secret</code> header — laat de CRM Turnstile skippen bij een match)</span></label>
+          <input type="text" id="crm-webhook-secret" placeholder="bv. 85ba0714663873a6b7bdb1c9423faa8d3c32c8335fb1bd112c33012f8b21a026">
+        </div>
       </section>
 
       <!-- Email Settings -->
@@ -508,6 +512,7 @@ let config = {
   googleAdsConversionId: '', 
   googleAdsConversionLabel: '', 
   crmWebhookUrl: '',
+  crmWebhookSecret: '',
   mollieMethods: 'ideal, creditcard, bancontact',
   mollieInterval: '12 months',
   molliePaymentType: 'recurring',
@@ -596,6 +601,7 @@ function renderConfigInit() {
   if (!config.googleAdsConversionId) config.googleAdsConversionId = '';
   if (!config.googleAdsConversionLabel) config.googleAdsConversionLabel = '';
   if (!config.crmWebhookUrl) config.crmWebhookUrl = '';
+  if (!config.crmWebhookSecret) config.crmWebhookSecret = '';
   if (!config.mollieMethods) config.mollieMethods = 'ideal, creditcard, bancontact';
   if (!config.mollieInterval) config.mollieInterval = '12 months';
   if (!config.molliePaymentType) config.molliePaymentType = 'recurring';
@@ -925,6 +931,7 @@ function renderAll() {
   document.getElementById('ga-conversion-id').value = config.googleAdsConversionId || '';
   document.getElementById('ga-conversion-label').value = config.googleAdsConversionLabel || '';
   document.getElementById('crm-webhook-url').value = config.crmWebhookUrl || '';
+  document.getElementById('crm-webhook-secret').value = config.crmWebhookSecret || '';
   
   const methods = (config.mollieMethods || 'ideal, creditcard, bancontact').split(',').map(m => m.trim());
   document.querySelectorAll('.mollie-method-checkbox').forEach(cb => {
@@ -1447,6 +1454,7 @@ async function saveConfig() {
   config.googleAdsConversionId = document.getElementById('ga-conversion-id').value.trim();
   config.googleAdsConversionLabel = document.getElementById('ga-conversion-label').value.trim();
   config.crmWebhookUrl = document.getElementById('crm-webhook-url').value.trim();
+  config.crmWebhookSecret = document.getElementById('crm-webhook-secret').value.trim();
   
   const selectedMethods = [];
   document.querySelectorAll('.mollie-method-checkbox:checked').forEach(cb => selectedMethods.push(cb.value));

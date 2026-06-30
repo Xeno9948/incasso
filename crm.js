@@ -50,15 +50,18 @@ KVK: ${kvkNumber || ''}`;
  * Send the "Won" CRM webhook. Throws on network error or non-2xx
  * response so the caller can log status accordingly.
  */
-async function sendWonLead(crmUrl, metadata, paymentId) {
+async function sendWonLead(crmUrl, metadata, paymentId, opts = {}) {
   if (!crmUrl) throw new Error('crmWebhookUrl not configured');
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Kiyoh-Webhook-Client/1.0'
+  };
+  if (opts.webhookSecret) headers['X-Webhook-Secret'] = opts.webhookSecret;
 
   const resp = await fetch(crmUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'Kiyoh-Webhook-Client/1.0'
-    },
+    headers,
     body: JSON.stringify(buildPayload(metadata, paymentId))
   });
 

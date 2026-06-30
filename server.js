@@ -468,6 +468,7 @@ app.post('/api/checkout', async (req, res) => {
       const config = await getConfig();
 
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       if (crmUrl) {
         console.log('Sending abandoned cart lead to CRM webhook:', crmUrl);
         // Fire in background, don't await
@@ -476,12 +477,15 @@ app.post('/api/checkout', async (req, res) => {
         const selectedModules = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen extra modules';
         const explicitMessage = `Pakket geselecteerd: ${package.name}\nModules geselecteerd: ${selectedModules}\nAdres: ${customer.address}\nPostcode: ${customer.postal}\nPlaats: ${customer.city}\nLand: ${customer.country}\nKVK: ${customer.kvk}`;
 
+        const headers = {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Kiyoh-Webhook-Client/1.0'
+        };
+        if (crmSecret) headers['X-Webhook-Secret'] = crmSecret;
+
         fetch(crmUrl, {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'User-Agent': 'Kiyoh-Webhook-Client/1.0'
-          },
+          headers,
           body: JSON.stringify({
             aanmelding_type: "Kiyoh Online Abonnement",
             bedrijf: customer.bName,
@@ -588,10 +592,11 @@ app.post('/api/webhook', async (req, res) => {
 
       // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       if (crmUrl) {
         try {
           console.log('Sending lead to CRM webhook:', crmUrl);
-          await crm.sendWonLead(crmUrl, payment.metadata, paymentId);
+          await crm.sendWonLead(crmUrl, payment.metadata, paymentId, { webhookSecret: crmSecret });
           console.log('CRM webhook sent successfully!');
           await db.logEmail({ paymentId, type: 'crm',
             recipient: crmUrl, status: 'sent', source: 'webhook' });
@@ -897,9 +902,10 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
     if (wanted.includes('crm')) {
       const cfg = await getConfig();
       const crmUrl = cfg.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      const crmSecret = cfg.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       try {
         if (!crmUrl) throw new Error('crmWebhookUrl not configured');
-        await crm.sendWonLead(crmUrl, meta, p.id);
+        await crm.sendWonLead(crmUrl, meta, p.id, { webhookSecret: crmSecret });
         results.crm = { status: 'sent', recipient: crmUrl };
         await db.logEmail({ paymentId: p.id, type: 'crm',
           recipient: crmUrl, status: 'sent', source: 'manual' });
