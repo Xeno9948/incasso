@@ -120,8 +120,13 @@ function fillXlsx(metadata, paid) {
   // C28 / C29 = facturatie tel/email — niet uitgevraagd
 
   // ─── Pakket ───────────────────────────────────────────────────────
-  setText(ws, 'C32', metadata.businessName || metadata.customerName); // Label
-  setText(ws, 'C33', metadata.packageId);                              // Pakket
+  // Label (C32) is the brand dropdown — this app only sells Kiyoh.
+  // Pakket (C33) is the tier prefixed with the brand for clarity on
+  // the boekhouder's overview.
+  const brand = 'Kiyoh';
+  const tier  = metadata.packageId || '';
+  setText(ws, 'C32', brand);
+  setText(ws, 'C33', tier ? `${brand} ${tier}` : brand);
 
   const invites = PACKAGE_INVITES[normalize(metadata.packageId)];
   if (invites) setNumber(ws, 'C35', invites);
