@@ -289,6 +289,10 @@
             <label>Betalingsomschrijving (Placeholder: {PACKAGE})</label>
             <input type="text" id="mollie-description">
           </div>
+          <div class="field full">
+            <label>BTW Percentage (%)</label>
+            <input type="number" id="mollie-vat-percentage" step="0.1" value="21">
+          </div>
         </div>
       </section>
 
@@ -517,6 +521,7 @@ let config = {
   mollieInterval: '12 months',
   molliePaymentType: 'recurring',
   mollieDescription: 'Kiyoh Abonnement: {PACKAGE}',
+  vatPercentage: 21,
   mollieTestMode: true,
   mollieLiveKey: '',
   mollieTestKey: '',
@@ -606,6 +611,7 @@ function renderConfigInit() {
   if (!config.mollieInterval) config.mollieInterval = '12 months';
   if (!config.molliePaymentType) config.molliePaymentType = 'recurring';
   if (!config.mollieDescription) config.mollieDescription = 'Kiyoh Abonnement: {PACKAGE}';
+  if (config.vatPercentage === undefined) config.vatPercentage = 21;
   if (config.mollieTestMode === undefined) config.mollieTestMode = true;
   if (!config.mollieLiveKey) config.mollieLiveKey = '';
   if (!config.mollieTestKey) config.mollieTestKey = '';
@@ -941,6 +947,7 @@ function renderAll() {
   document.getElementById('mollie-interval').value = config.mollieInterval || '12 months';
   document.getElementById('mollie-payment-type').value = config.molliePaymentType || 'recurring';
   document.getElementById('mollie-description').value = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
+  document.getElementById('mollie-vat-percentage').value = config.vatPercentage !== undefined ? config.vatPercentage : 21;
   document.getElementById('mollie-test-mode').checked = !!config.mollieTestMode;
   document.getElementById('mollie-live-key').value = config.mollieLiveKey || '';
   document.getElementById('mollie-test-key').value = config.mollieTestKey || '';
@@ -1463,6 +1470,7 @@ async function saveConfig() {
   config.mollieInterval = document.getElementById('mollie-interval').value;
   config.molliePaymentType = document.getElementById('mollie-payment-type').value;
   config.mollieDescription = document.getElementById('mollie-description').value.trim();
+  config.vatPercentage = parseFloat(document.getElementById('mollie-vat-percentage').value);
   config.mollieTestMode = document.getElementById('mollie-test-mode').checked;
   config.mollieLiveKey = document.getElementById('mollie-live-key').value.trim();
   config.mollieTestKey = document.getElementById('mollie-test-key').value.trim();

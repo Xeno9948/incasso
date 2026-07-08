@@ -403,8 +403,11 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     // Advertising is monthly, but billing is yearly
-    const yearlyTotal = calculatedTotal * 12;
-    const amountStr = yearlyTotal.toFixed(2);
+    const yearlyTotalExcl = calculatedTotal * 12;
+    const vatPercentage = config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '' ? parseFloat(config.vatPercentage) : 21;
+    const vatAmount = yearlyTotalExcl * (vatPercentage / 100);
+    const yearlyTotalIncl = yearlyTotalExcl + vatAmount;
+    const amountStr = yearlyTotalIncl.toFixed(2);
 
     // 1. Create a Mollie Customer
     const mollieClient = await getMollieClient();

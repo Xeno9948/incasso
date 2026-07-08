@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
 
   // ─── LOAD CONFIG ─────────────────────────────────────────
-  let config = { packages: [], modules: [], coreFeatures: [], googleAdsConversionId: '', googleAdsConversionLabel: '' };
+  let config = { packages: [], modules: [], coreFeatures: [], googleAdsConversionId: '', googleAdsConversionLabel: '', vatPercentage: 21 };
   try {
     const res = await fetch('/api/config');
     config = await res.json();
@@ -119,6 +119,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const summaryPackageName = document.getElementById('summary-package-name');
   const summaryPackagePrice= document.getElementById('summary-package-price');
   const summaryModulesList = document.getElementById('summary-modules-list');
+  const summarySubtotalPrice = document.getElementById('summary-subtotal-price');
+  const summaryVatPercentage = document.getElementById('summary-vat-percentage');
+  const summaryVatPrice = document.getElementById('summary-vat-price');
   const summaryTotalPrice  = document.getElementById('summary-total-price');
   const btnGoToCheckout    = document.getElementById('btn-go-to-checkout');
   const btnBackToModules   = document.getElementById('btn-back-to-modules');
@@ -250,7 +253,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
 
-    summaryTotalPrice.textContent = formatEuro(yearlyTotal);
+    const vatPercentage = config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '' ? parseFloat(config.vatPercentage) : 21;
+    const vatAmount = yearlyTotal * (vatPercentage / 100);
+    const finalTotal = yearlyTotal + vatAmount;
+
+    summarySubtotalPrice.textContent = formatEuro(yearlyTotal);
+    summaryVatPercentage.textContent = vatPercentage;
+    summaryVatPrice.textContent = formatEuro(vatAmount);
+    summaryTotalPrice.textContent = formatEuro(finalTotal);
   }
 
   function formatEuro(amount) {
