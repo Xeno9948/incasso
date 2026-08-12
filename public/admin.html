@@ -177,6 +177,10 @@
   <div class="topbar">
     <div class="topbar-logo">Kiyoh<span>Admin</span></div>
     <div style="display: flex; align-items: center; gap: 20px;">
+      <select id="tenant-selector" style="padding: 8px 12px; border: 2px solid #eee; border-radius: 6px; font-family: inherit; cursor: pointer;">
+        <option value="kiyoh">Kiyoh</option>
+        <option value="klantenvertellen">Klantenvertellen</option>
+      </select>
       <span id="save-status"><i class="fas fa-check"></i> Opgeslagen</span>
       <button id="save-btn" class="save-btn" onclick="saveConfig()"><i class="fas fa-save"></i> Wijzigingen opslaan</button>
       <button class="icon-btn" onclick="logout()" title="Uitloggen" style="color:#888;"><i class="fas fa-sign-out-alt"></i></button>
@@ -587,7 +591,11 @@ function resetLogin() {
 }
 
 async function completeLogin() {
-  const configRes = await fetch('/api/config', {
+  // Get tenant from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenant = urlParams.get('tenant') || 'kiyoh';
+
+  const configRes = await fetch(`/api/config?tenant=${tenant}`, {
     headers: { 'Authorization': password }
   });
   if (!configRes.ok) {
@@ -599,6 +607,16 @@ async function completeLogin() {
 
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('admin-app').style.display = 'block';
+
+  // Set tenant selector and add change listener
+  document.getElementById('tenant-selector').value = tenant;
+  document.getElementById('tenant-selector').addEventListener('change', (e) => {
+    const newTenant = e.target.value;
+    const params = new URLSearchParams();
+    params.set('tenant', newTenant);
+    window.location.search = params.toString();
+  });
+
   renderAll();
 }
 
@@ -1483,9 +1501,12 @@ async function saveConfig() {
   config.smtpFrom = document.getElementById('smtp-from').value.trim();
   config.smtpTo   = document.getElementById('smtp-to').value.trim();
 
-  const res = await fetch('/api/config', {
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenant = urlParams.get('tenant') || 'kiyoh';
+
+  const res = await fetch(`/api/config?tenant=${tenant}`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       'Authorization': password
     },

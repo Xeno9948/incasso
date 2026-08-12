@@ -328,10 +328,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     try {
+      // Get tenant from URL query param (e.g., ?tenant=klantenvertellen)
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenant = urlParams.get('tenant') || 'kiyoh';
+
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone }, utms })
+        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone }, utms, tenant })
       });
 
       if (!res.ok) throw new Error('Server error');
