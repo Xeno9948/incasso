@@ -230,6 +230,10 @@ function getTenantBrandColor(tenant) {
   return '#f58220'; // Kiyoh orange
 }
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kiyoh-admin-2024';
+// Separate, lower-privilege password for the standalone "Nieuwe Deal" sales
+// page — lets it out of anyone's hands without also handing out Mollie live
+// keys, SMTP credentials, or the CRM webhook secret from the full admin panel.
+const SALES_PASSWORD = process.env.SALES_PASSWORD || 'kiyoh-sales-2024';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -297,6 +301,17 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
+// Deal-creation auth: accepts either the full admin password or the
+// lower-privilege sales password. Used only by the sales-portal
+// deal-creation endpoint — never grants access to config/settings routes.
+const dealAuthMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || (authHeader !== ADMIN_PASSWORD && authHeader !== SALES_PASSWORD)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
 // Helper to get Mollie Client dynamically
 async function getMollieClient(tenant = 'kiyoh') {
   const config = await getConfig(tenant);
@@ -330,6 +345,16 @@ app.post('/api/auth', authLimiter, async (req, res) => {
   }
 
   res.json({ ok: true, twoFactorRequired: false });
+});
+
+// Login for the standalone sales portal (/deal.html). No 2FA — this is a
+// lower-privilege password meant to be handed to a sales team.
+app.post('/api/sales/auth', authLimiter, async (req, res) => {
+  const { password } = req.body;
+  if (password !== SALES_PASSWORD && password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/auth/2fa', authLimiter, async (req, res) => {
@@ -867,7 +892,7 @@ const EDITABLE_FIELDS = new Set([
  * the public /api/checkout flow, so the webhook, CRM, opdrachtformulier
  * and admin deals list all treat it identically.
  */
-app.post('/api/admin/create-deal', authMiddleware, async (req, res) => {
+app.post('/api/admin/create-deal', dealAuthMiddleware, async (req, res) => {
   try {
     const { customer, packageName, monthlyPrice, modulesList, description, sendEmail } = req.body;
 

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nieuwe Deal</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Montserrat', sans-serif; background: #f4f5f7; color: #1a1a1a; font-size: 0.9rem; }
+
+    /* ── Login Screen ── */
+    #login-screen {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .login-box {
+      background: white; border-radius: 16px; padding: 48px 40px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.08); width: 360px; text-align: center;
+    }
+    .login-box h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    .login-box p { color: #888; margin-bottom: 28px; font-size: 0.85rem; }
+    .login-box input {
+      width: 100%; padding: 13px 16px; border: 2px solid #eee; border-radius: 10px;
+      font-family: inherit; font-size: 0.95rem; margin-bottom: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .login-box input:focus { border-color: #f58220; }
+    #login-error { color: #e74c3c; font-size: 0.8rem; margin-bottom: 10px; display: none; }
+
+    .brand-logo { font-weight: 700; font-size: 1.8rem; margin-bottom: 16px; color: #f58220; }
+    .brand-logo span { color: #1a1a1a; }
+
+    /* ── App Layout ── */
+    #app { display: none; min-height: 100vh; }
+    .topbar {
+      background: white; border-bottom: 1px solid #eee; padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .save-btn {
+      background: #f58220; color: white; border: none; padding: 10px 24px;
+      border-radius: 8px; font-family: inherit; font-weight: 600; font-size: 0.9rem;
+      cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+    }
+    .save-btn:hover { background: #e0731a; }
+    .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .content { max-width: 720px; margin: 0 auto; padding: 32px 24px; }
+    h2 { font-size: 1.3rem; margin-bottom: 4px; }
+    .section-desc { color: #888; margin-bottom: 24px; font-size: 0.85rem; }
+
+    .item-card {
+      background: white; border-radius: 14px; border: 1px solid #eee;
+      margin-bottom: 16px; overflow: hidden;
+    }
+    .item-card-body { padding: 20px; }
+
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 0.78rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+    input[type="text"], input[type="number"], input[type="url"], input[type="email"], input[type="tel"], select {
+      padding: 10px 12px; border: 2px solid #eee; border-radius: 8px;
+      font-family: inherit; font-size: 0.88rem; outline: none; transition: border-color 0.2s; width: 100%;
+    }
+    input:focus, select:focus { border-color: #f58220; }
+
+    .checkbox-group { display: flex; flex-direction: column; gap: 10px; background: white; padding: 16px; border-radius: 10px; border: 1px solid #eee; }
+    .checkbox-item { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+    .checkbox-item input { width: 18px; height: 18px; accent-color: #f58220; cursor: pointer; }
+
+    .copy-btn {
+      background: #333; color: white; border: none; padding: 8px 16px;
+      border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.8rem;
+    }
+    .copy-btn:hover { background: #444; }
+
+    #tenant-selector {
+      padding: 8px 12px; border: 2px solid #eee; border-radius: 6px;
+      font-family: inherit; cursor: pointer; background: white;
+    }
+  </style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <div class="brand-logo">Nieuwe<span>Deal</span></div>
+    <h1>Inloggen</h1>
+    <p>Voer het sales-portal wachtwoord in.</p>
+    <div id="login-error">Onjuist wachtwoord.</div>
+    <input type="password" id="pw-input" placeholder="Wachtwoord">
+    <button class="save-btn" style="width:100%; justify-content:center;" onclick="tryLogin()">Inloggen</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand-logo" style="font-size:1.1rem; margin-bottom:0;">Nieuwe<span>Deal</span></div>
+    <select id="tenant-selector">
+      <option value="kiyoh">Kiyoh</option>
+      <option value="klantenvertellen">Klantenvertellen</option>
+    </select>
+  </div>
+
+  <div class="content">
+    <h2>Nieuwe Deal</h2>
+    <p class="section-desc">Maak een incasso-link met een eigen prijs voor een klant.</p>
+
+    <div class="item-card">
+      <div class="item-card-body">
+        <h3 style="margin-bottom:4px; font-size:0.95rem;">Klantgegevens</h3>
+        <div class="field-grid">
+          <div class="field full">
+            <label>Contactpersoon</label>
+            <input type="text" id="nd-customer-name" placeholder="Voornaam Achternaam">
+          </div>
+          <div class="field">
+            <label>Bedrijfsnaam</label>
+            <input type="text" id="nd-business-name">
+          </div>
+          <div class="field">
+            <label>KVK-nummer</label>
+            <input type="text" id="nd-kvk">
+          </div>
+          <div class="field">
+            <label>BTW-nummer</label>
+            <input type="text" id="nd-btw">
+          </div>
+          <div class="field full">
+            <label>Adres</label>
+            <input type="text" id="nd-address" placeholder="Straat & huisnummer">
+          </div>
+          <div class="field">
+            <label>Postcode</label>
+            <input type="text" id="nd-postal">
+          </div>
+          <div class="field">
+            <label>Plaats</label>
+            <input type="text" id="nd-city">
+          </div>
+          <div class="field">
+            <label>Land</label>
+            <input type="text" id="nd-country" value="NL">
+          </div>
+          <div class="field">
+            <label>Website</label>
+            <input type="url" id="nd-website" placeholder="https://...">
+          </div>
+          <div class="field">
+            <label>E-mailadres</label>
+            <input type="email" id="nd-email">
+          </div>
+          <div class="field">
+            <label>Telefoonnummer</label>
+            <input type="tel" id="nd-phone">
+          </div>
+        </div>
+
+        <h3 style="margin:24px 0 4px; font-size:0.95rem;">Pakket &amp; Prijs</h3>
+        <div class="field-grid">
+          <div class="field">
+            <label>Pakketnaam</label>
+            <input type="text" id="nd-package-name" placeholder="bijv. Pro">
+          </div>
+          <div class="field">
+            <label>Prijs per maand (excl. BTW)</label>
+            <input type="number" id="nd-monthly-price" step="0.01" min="0" placeholder="45.00" oninput="updateNdPricePreview()">
+          </div>
+          <div class="field full">
+            <label>Extra modules (optioneel, komma-gescheiden)</label>
+            <input type="text" id="nd-modules" placeholder="bijv. XML-feed, QR Code Reviews">
+          </div>
+          <div class="field full">
+            <label>Omschrijving op afschrift (optioneel)</label>
+            <input type="text" id="nd-description" placeholder="Laat leeg voor standaardtekst">
+          </div>
+        </div>
+
+        <div id="nd-price-preview" style="margin-top:16px; padding:14px 16px; background:#fafafa; border-radius:10px; font-size:0.85rem; color:#555;">
+          Vul een maandprijs in om het jaarbedrag te berekenen.
+        </div>
+
+        <div class="checkbox-group" style="margin-top:20px;">
+          <label class="checkbox-item">
+            <input type="checkbox" id="nd-send-email">
+            Stuur betaallink direct per e-mail naar klant
+          </label>
+        </div>
+
+        <button class="save-btn" style="margin-top:24px;" onclick="createDeal()" id="nd-submit-btn">
+          <i class="fas fa-link"></i> Incasso-link genereren
+        </button>
+
+        <div id="nd-result" style="display:none; margin-top:20px; padding:16px; background:rgba(104,176,61,0.08); border:1px solid rgba(104,176,61,0.3); border-radius:10px;">
+          <div style="font-weight:600; color:#68b03d; margin-bottom:8px;"><i class="fas fa-check-circle"></i> Link aangemaakt</div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="nd-result-link" readonly style="flex:1;">
+            <button class="copy-btn" onclick="copyDealLink()">Kopiëren</button>
+          </div>
+          <div id="nd-email-status" style="margin-top:8px; font-size:0.8rem; color:#888;"></div>
+        </div>
+
+        <div id="nd-error" style="display:none; margin-top:20px; padding:16px; background:rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.3); border-radius:10px; color:#c0392b; font-size:0.85rem;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let password = '';
+let config = { vatPercentage: 21 };
+
+document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+
+async function tryLogin() {
+  const pw = document.getElementById('pw-input').value;
+  const res = await fetch('/api/sales/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw })
+  });
+
+  if (!res.ok) {
+    document.getElementById('login-error').style.display = 'block';
+    return;
+  }
+
+  password = pw;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenant = urlParams.get('tenant') || 'kiyoh';
+  document.getElementById('tenant-selector').value = tenant;
+  document.getElementById('tenant-selector').addEventListener('change', (e) => {
+    const params = new URLSearchParams();
+    params.set('tenant', e.target.value);
+    window.location.search = params.toString();
+  });
+
+  await loadTenantConfig(tenant);
+}
+
+async function loadTenantConfig(tenant) {
+  try {
+    const res = await fetch(`/api/config?tenant=${tenant}`);
+    if (res.ok) config = await res.json();
+  } catch (e) {
+    console.error('Failed to load config', e);
+  }
+  updateNdPricePreview();
+}
+
+function updateNdPricePreview() {
+  const monthly = parseFloat(document.getElementById('nd-monthly-price').value);
+  const preview = document.getElementById('nd-price-preview');
+  if (!monthly || monthly <= 0) {
+    preview.textContent = 'Vul een maandprijs in om het jaarbedrag te berekenen.';
+    return;
+  }
+  const vatPct = (config && config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '')
+    ? parseFloat(config.vatPercentage) : 21;
+  const yearlyExcl = monthly * 12;
+  const vatAmount = yearlyExcl * (vatPct / 100);
+  const yearlyIncl = yearlyExcl + vatAmount;
+  preview.innerHTML = `Jaarbedrag excl. BTW: <strong>€${yearlyExcl.toFixed(2)}</strong> &nbsp;·&nbsp; `
+    + `BTW (${vatPct}%): <strong>€${vatAmount.toFixed(2)}</strong> &nbsp;·&nbsp; `
+    + `Totaal incl. BTW: <strong style="color:#68b03d;">€${yearlyIncl.toFixed(2)}</strong>`;
+}
+
+async function createDeal() {
+  const pName   = document.getElementById('nd-customer-name').value.trim();
+  const bName   = document.getElementById('nd-business-name').value.trim();
+  const kvk     = document.getElementById('nd-kvk').value.trim();
+  const btw     = document.getElementById('nd-btw').value.trim();
+  const address = document.getElementById('nd-address').value.trim();
+  const postal  = document.getElementById('nd-postal').value.trim();
+  const city    = document.getElementById('nd-city').value.trim();
+  const country = document.getElementById('nd-country').value.trim() || 'NL';
+  const website = document.getElementById('nd-website').value.trim();
+  const email   = document.getElementById('nd-email').value.trim();
+  const phone   = document.getElementById('nd-phone').value.trim();
+  const packageName  = document.getElementById('nd-package-name').value.trim();
+  const monthlyPrice = document.getElementById('nd-monthly-price').value;
+  const modulesList  = document.getElementById('nd-modules').value.trim();
+  const description  = document.getElementById('nd-description').value.trim();
+  const sendEmail    = document.getElementById('nd-send-email').checked;
+
+  const ndError  = document.getElementById('nd-error');
+  const ndResult = document.getElementById('nd-result');
+  ndError.style.display = 'none';
+  ndResult.style.display = 'none';
+
+  if (!pName || !bName || !email) {
+    ndError.textContent = 'Contactpersoon, bedrijfsnaam en e-mailadres zijn verplicht.';
+    ndError.style.display = 'block';
+    return;
+  }
+  if (!monthlyPrice || parseFloat(monthlyPrice) <= 0) {
+    ndError.textContent = 'Vul een geldige prijs per maand in.';
+    ndError.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('nd-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Bezig…';
+
+  try {
+    const tenant = document.getElementById('tenant-selector').value;
+
+    const res = await fetch(`/api/admin/create-deal?tenant=${tenant}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': password },
+      body: JSON.stringify({
+        customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone },
+        packageName, monthlyPrice, modulesList, description, sendEmail
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Onbekende fout');
+
+    document.getElementById('nd-result-link').value = data.checkoutUrl;
+    const emailStatus = document.getElementById('nd-email-status');
+    if (sendEmail) {
+      emailStatus.textContent = data.emailSent
+        ? `E-mail verstuurd naar ${email}.`
+        : `E-mail versturen mislukt: ${data.emailError || 'onbekende fout'}.`;
+      emailStatus.style.color = data.emailSent ? '#68b03d' : '#c0392b';
+    } else {
+      emailStatus.textContent = '';
+    }
+    ndResult.style.display = 'block';
+  } catch (err) {
+    ndError.textContent = 'Aanmaken mislukt: ' + err.message;
+    ndError.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-link"></i> Incasso-link genereren';
+  }
+}
+
+function copyDealLink() {
+  const input = document.getElementById('nd-result-link');
+  input.select();
+  document.execCommand('copy');
+  alert('Link gekopieerd naar klembord!');
+}
+</script>
+</body>
+</html>
