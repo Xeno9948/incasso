@@ -39,6 +39,15 @@ function normalize(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// The "Label" dropdown on the opdrachtformulier (Data sheet) supports
+// both brands sold through this app.
+function getBrandName(tenant) {
+  return tenant === 'klantenvertellen' ? 'Klantenvertellen' : 'Kiyoh';
+}
+function getBrandColor(tenant) {
+  return tenant === 'klantenvertellen' ? '#0066cc' : '#f58220';
+}
+
 /**
  * Excel serial date number for a JS Date (1900 date system, matching
  * what Excel/Google Sheets uses, including the 1900-02-29 bug).
@@ -77,7 +86,7 @@ function setBool(ws, addr, value)   { setCell(ws, addr, !!value, 'b'); }
 /**
  * Build the filled workbook as a Buffer.
  */
-function fillXlsx(metadata, paid) {
+function fillXlsx(metadata, paid, tenant = 'kiyoh') {
   if (!fs.existsSync(TEMPLATE_PATH)) {
     throw new Error(`Template not found: ${TEMPLATE_PATH}`);
   }
@@ -120,10 +129,10 @@ function fillXlsx(metadata, paid) {
   // C28 / C29 = facturatie tel/email — niet uitgevraagd
 
   // ─── Pakket ───────────────────────────────────────────────────────
-  // Label (C32) is the brand dropdown — this app only sells Kiyoh.
+  // Label (C32) is the brand dropdown — Kiyoh or Klantenvertellen.
   // Pakket (C33) is the tier prefixed with the brand for clarity on
   // the boekhouder's overview.
-  const brand = 'Kiyoh';
+  const brand = getBrandName(tenant);
   const tier  = metadata.packageId || '';
   setText(ws, 'C32', brand);
   setText(ws, 'C33', tier ? `${brand} ${tier}` : brand);
@@ -155,18 +164,20 @@ function fillXlsx(metadata, paid) {
 /**
  * Main entry point: fill the template, email as attachment.
  */
-async function sendToAccountant(metadata, paid, mailer) {
-  const xlsxBuffer = fillXlsx(metadata, paid);
+async function sendToAccountant(metadata, paid, mailer, tenant = 'kiyoh') {
+  const xlsxBuffer = fillXlsx(metadata, paid, tenant);
 
   const business = (metadata.businessName || metadata.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
   const fileName = `Opdrachtformulier - ${business} - ${new Date().toISOString().slice(0, 10)}.xlsx`;
 
   const yearly = parseFloat(metadata.yearlyAmount || '0').toFixed(2);
   const modules = metadata.modulesList || 'Geen extra modules';
+  const brand = getBrandName(tenant);
+  const brandColor = getBrandColor(tenant);
 
   const summaryHtml = `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
-      <h2 style="color:#f58220;">Nieuw opdrachtformulier</h2>
+      <h2 style="color:${brandColor};">Nieuw opdrachtformulier</h2>
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
         <tr><td style="padding:6px 0;color:#888;width:160px;">Bedrijf</td><td><strong>${metadata.businessName || metadata.customerName}</strong></td></tr>
         <tr><td style="padding:6px 0;color:#888;">Pakket</td><td>${metadata.packageId || '—'}</td></tr>
@@ -175,7 +186,7 @@ async function sendToAccountant(metadata, paid, mailer) {
         <tr><td style="padding:6px 0;color:#888;">Betaald</td><td><strong style="color:${paid ? '#68b03d' : '#d9534f'};">${paid ? 'Ja, eerste jaarbedrag voldaan' : 'Nog niet'}</strong></td></tr>
       </table>
       <p style="margin-top:20px;">Het ingevulde opdrachtformulier zit als Excel-bijlage bij deze mail.</p>
-      <p style="font-size:12px;color:#aaa;margin-top:24px;">Automatisch verstuurd door het Kiyoh betalingssysteem.</p>
+      <p style="font-size:12px;color:#aaa;margin-top:24px;">Automatisch verstuurd door het ${brand} betalingssysteem.</p>
     </div>`;
 
   await mailer.transporter.sendMail({

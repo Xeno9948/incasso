@@ -21,8 +21,8 @@ const db = require('./db');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // ─── SMTP EMAIL HELPER ────────────────────────────────────────────────────────
-async function getSmtpTransporter() {
-  const config = await getConfig();
+async function getSmtpTransporter(tenant = 'kiyoh') {
+  const config = await getConfig(tenant);
 
   const smtpHost = config.smtpHost || process.env.SMTP_HOST;
   const smtpPort = parseInt(config.smtpPort || process.env.SMTP_PORT || '465', 10);
@@ -40,11 +40,11 @@ async function getSmtpTransporter() {
     auth: { user: smtpUser, pass: smtpPass }
   });
 
-  return { transporter, from: `"Kiyoh Betalingen" <${smtpFrom}>`, to: smtpTo };
+  return { transporter, from: `"${getTenantName(tenant)} Betalingen" <${smtpFrom}>`, to: smtpTo };
 }
 
 async function sendInternalNotification(metadata, tenant = 'kiyoh') {
-  const mailer = await getSmtpTransporter();
+  const mailer = await getSmtpTransporter(tenant);
   if (!mailer) {
     console.log('SMTP not configured — skipping internal notification email.');
     return;
@@ -118,7 +118,7 @@ async function sendInternalNotification(metadata, tenant = 'kiyoh') {
 }
 
 async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
-  const mailer = await getSmtpTransporter();
+  const mailer = await getSmtpTransporter(tenant);
   if (!mailer || !metadata.customerEmail) return;
 
   const tenantName = getTenantName(tenant);
@@ -157,22 +157,51 @@ async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
   console.log(`Customer welcome email sent to ${metadata.customerEmail}`);
 }
 
+/**
+ * Sales-portal deal: emails the customer a payment link for a
+ * custom-priced deal a salesperson just put together (no fixed
+ * pricing shown anywhere — used for Klantenvertellen deals).
+ */
+async function sendDealPaymentLink(metadata, checkoutUrl, tenant = 'kiyoh') {
+  const mailer = await getSmtpTransporter(tenant);
+  if (!mailer || !metadata.customerEmail) return false;
+
+  const tenantName = getTenantName(tenant);
+  const brandColor = getTenantBrandColor(tenant);
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:${brandColor};padding:24px 32px;border-radius:10px 10px 0 0;">
+        <h2 style="color:white;margin:0;">Je offerte bij ${tenantName}</h2>
+      </div>
+      <div style="background:#fff;border:1px solid #eee;border-top:none;padding:32px;border-radius:0 0 10px 10px;font-size:14px;color:#333;">
+        <p>Hi ${metadata.customerName || ''},</p>
+        <p>Bedankt voor je interesse in <strong>${metadata.packageId || 'onze diensten'}</strong>. Hieronder vind je de betaallink om je abonnement te bevestigen.</p>
+        <p style="text-align:center;margin:24px 0;">
+          <a href="${checkoutUrl}" style="background:${brandColor};color:white;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">Bevestig &amp; betaal</a>
+        </p>
+        <p style="font-size:12px;color:#888;word-break:break-all;">Of plak deze link in je browser: ${checkoutUrl}</p>
+        <p>Vragen? Reageer gewoon op deze mail.</p>
+        <p style="margin-top:24px;">— Het ${tenantName} team</p>
+      </div>
+    </div>
+  `;
+
+  await mailer.transporter.sendMail({
+    from: mailer.from,
+    to: metadata.customerEmail,
+    subject: `Je offerte bij ${tenantName} — bevestig je abonnement`,
+    html
+  });
+
+  console.log(`Deal payment link emailed to ${metadata.customerEmail}`);
+  return true;
+}
+
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 
-// ─── TENANT DETECTION ─────────────────────────────────────────────────────────
-function detectTenant(hostname) {
-  // Extract base domain without port
-  const host = hostname.split(':')[0].toLowerCase();
-
-  if (host.includes('klantenvertellen')) {
-    return 'klantenvertellen';
-  }
-
-  // Default to kiyoh
-  return 'kiyoh';
-}
-
+// ─── TENANT HELPERS ───────────────────────────────────────────────────────────
 function getTenantConfigPath(tenant) {
   if (tenant === 'klantenvertellen') {
     return path.join(__dirname, 'config.klantenvertellen.json');
@@ -269,8 +298,8 @@ const authMiddleware = (req, res, next) => {
 };
 
 // Helper to get Mollie Client dynamically
-async function getMollieClient() {
-  const config = await getConfig();
+async function getMollieClient(tenant = 'kiyoh') {
+  const config = await getConfig(tenant);
   const testMode = config.mollieTestMode !== false; // Default to true if not specified
   
   // Priority: 1. Env Var, 2. Config, 3. Hardcoded Test Key
@@ -473,7 +502,7 @@ app.post('/api/checkout', async (req, res) => {
     const amountStr = yearlyTotalIncl.toFixed(2);
 
     // 1. Create a Mollie Customer
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const mollieCustomer = await mollieClient.customers.create({
       name: `${customer.pName} (${customer.bName})`,
       email: customer.email,
@@ -498,7 +527,7 @@ app.post('/api/checkout', async (req, res) => {
       description: `Eerste verificatiebetaling voor ${descriptionStr}`,
       redirectUrl: `${baseUrl}/success.html`,
       cancelUrl: `${baseUrl}/cancel.html`,
-      webhookUrl: `${baseUrl}/api/webhook`, 
+      webhookUrl: `${baseUrl}/api/webhook?tenant=${req.tenant}`,
       billingAddress: {
         streetAndNumber: customer.address,
         postalCode: customer.postal,
@@ -506,6 +535,7 @@ app.post('/api/checkout', async (req, res) => {
         country: customer.country
       },
       metadata: {
+        tenant: req.tenant,
         packageId: package.name,
         yearlyAmount: amountStr,
         description: descriptionStr,
@@ -594,7 +624,7 @@ app.post('/api/webhook', async (req, res) => {
     if (!paymentId) return res.status(400).send('No id provided');
 
     // Retrieve payment details from Mollie to verify its status
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const payment = await mollieClient.payments.get(paymentId);
 
     // Load config inside webhook to ensure it's not stale
@@ -722,9 +752,9 @@ app.post('/api/webhook', async (req, res) => {
       // ─── SEND OPDRACHT-FORMULIER TO ACCOUNTANT ───────────────────────
       if (!payment.metadata.invoice_id) {
         try {
-          const mailer = await getSmtpTransporter();
+          const mailer = await getSmtpTransporter(req.tenant);
           if (mailer) {
-            await opdracht.sendToAccountant(payment.metadata, true, mailer);
+            await opdracht.sendToAccountant(payment.metadata, true, mailer, req.tenant);
             await db.logEmail({ paymentId: payment.id, type: 'accountant',
               recipient: 'administratie@kv-review.nl',
               status: 'sent', source: 'webhook' });
@@ -765,7 +795,7 @@ app.post('/api/webhook', async (req, res) => {
 // --- SUBSCRIBER MANAGEMENT API ---
 app.get('/api/subscribers', authMiddleware, async (req, res) => {
   try {
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     
     // 1. Get recent subscriptions
     const subscriptions = await mollieClient.subscription.page({ limit: 50 });
@@ -799,7 +829,7 @@ app.post('/api/subscribers/cancel', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing customerId or subscriptionId' });
     }
 
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     // Correct signature: cancel(subscriptionId, { customerId })
     await mollieClient.customerSubscriptions.cancel(subscriptionId, { customerId });
     
@@ -829,13 +859,162 @@ const EDITABLE_FIELDS = new Set([
 ]);
 
 /**
+ * ─── SALES PORTAL: CREATE A CUSTOM-PRICED DEAL ─────────────────────────────
+ * For tenants that don't publish fixed pricing (e.g. Klantenvertellen), a
+ * salesperson fills in the customer's details and an agreed monthly price
+ * here instead of the customer going through the public pricing iframe.
+ * Produces a Mollie checkout link with the exact same metadata shape as
+ * the public /api/checkout flow, so the webhook, CRM, opdrachtformulier
+ * and admin deals list all treat it identically.
+ */
+app.post('/api/admin/create-deal', authMiddleware, async (req, res) => {
+  try {
+    const { customer, packageName, monthlyPrice, modulesList, description, sendEmail } = req.body;
+
+    if (!customer || !customer.pName || !customer.bName || !customer.email) {
+      return res.status(400).json({ error: 'Klantnaam, bedrijfsnaam en e-mailadres zijn verplicht.' });
+    }
+    const price = parseFloat(monthlyPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ error: 'Vul een geldige prijs per maand in.' });
+    }
+
+    const config = await getConfig(req.tenant);
+    const methods = config.mollieMethods ? config.mollieMethods.split(',').map(m => m.trim()) : ['ideal', 'creditcard', 'bancontact'];
+    const isRecurring = config.molliePaymentType !== 'once';
+    const sequenceType = isRecurring ? 'first' : 'oneoff';
+
+    const pkgName = (packageName || '').trim() || 'Maatwerk';
+    const modulesStr = (modulesList || '').trim();
+
+    let descriptionTemplate = config.mollieDescription || `${getTenantName(req.tenant)} Abonnement: {PACKAGE}`;
+    descriptionTemplate = descriptionTemplate.replace('{PACKAGE}', pkgName).replace('{LEVEL}', modulesStr);
+    let descriptionStr = (description || '').trim() || descriptionTemplate;
+    if (modulesStr) descriptionStr += `, Module: ${modulesStr}`;
+
+    // Same yearly/VAT math as the public checkout, just seeded from a
+    // manually entered monthly price instead of a package price lookup.
+    const yearlyTotalExcl = price * 12;
+    const vatPercentage = config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== ''
+      ? parseFloat(config.vatPercentage) : 21;
+    const vatAmount = yearlyTotalExcl * (vatPercentage / 100);
+    const yearlyTotalIncl = yearlyTotalExcl + vatAmount;
+    const amountStr = yearlyTotalIncl.toFixed(2);
+
+    const mollieClient = await getMollieClient(req.tenant);
+    const mollieCustomer = await mollieClient.customers.create({
+      name: `${customer.pName} (${customer.bName})`,
+      email: customer.email,
+    });
+
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const baseUrl = `${protocol}://${req.headers.host}`;
+
+    const payment = await mollieClient.payments.create({
+      amount: { value: amountStr, currency: 'EUR' },
+      customerId: mollieCustomer.id,
+      sequenceType,
+      method: methods,
+      description: `Eerste verificatiebetaling voor ${descriptionStr}`,
+      redirectUrl: `${baseUrl}/success.html`,
+      cancelUrl: `${baseUrl}/cancel.html`,
+      webhookUrl: `${baseUrl}/api/webhook?tenant=${req.tenant}`,
+      billingAddress: {
+        streetAndNumber: customer.address || '',
+        postalCode: customer.postal || '',
+        city: customer.city || '',
+        country: customer.country || 'NL'
+      },
+      metadata: {
+        tenant: req.tenant,
+        source: 'sales-portal',
+        packageId: pkgName,
+        yearlyAmount: amountStr,
+        description: descriptionStr,
+        customerName: customer.pName,
+        businessName: customer.bName,
+        website: customer.website || '',
+        customerEmail: customer.email,
+        customerPhone: customer.phone || '',
+        businessAddress: customer.address || '',
+        businessPostal: customer.postal || '',
+        businessCity: customer.city || '',
+        businessCountry: customer.country || 'NL',
+        kvkNumber: customer.kvk || '',
+        btwNumber: customer.btw || '',
+        modulesList: modulesStr
+      }
+    });
+
+    const checkoutUrl = payment.getCheckoutUrl();
+    let emailSent = false;
+    let emailError = null;
+
+    if (sendEmail) {
+      try {
+        emailSent = await sendDealPaymentLink(payment.metadata, checkoutUrl, req.tenant);
+        if (!emailSent) emailError = 'SMTP niet geconfigureerd of geen e-mailadres.';
+      } catch (err) {
+        emailError = err.message;
+        console.error('Failed to email deal payment link:', err.message);
+      }
+    }
+
+    res.json({ checkoutUrl, paymentId: payment.id, emailSent, emailError });
+
+    // Fire CRM "Opvolgen" lead the same way the public checkout does,
+    // so this deal shows up in the CRM even if the customer never pays.
+    try {
+      const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
+      const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+      if (crmUrl) {
+        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Kiyoh-Webhook-Client/1.0' };
+        if (crmSecret) headers['X-Webhook-Secret'] = crmSecret;
+        fetch(crmUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            aanmelding_type: `${getTenantName(req.tenant)} Sales Portal Deal`,
+            bedrijf: customer.bName,
+            contactpersoon: customer.pName,
+            website: customer.website || '',
+            telefoon: customer.phone || '',
+            email: customer.email,
+            collega: 'Systeem',
+            status: 'Opvolgen',
+            upsell: 'NB',
+            product: getTenantName(req.tenant),
+            message: `Handmatige deal via sales portal.\nPakket: ${pkgName}\nModules: ${modulesStr || 'Geen'}`,
+            feature: pkgName,
+            deal_waarde: amountStr,
+            kvk: customer.kvk || '',
+            adres: customer.address || '',
+            postcode: customer.postal || '',
+            plaats: customer.city || '',
+            land: customer.country || 'NL',
+            source: 'sales-portal',
+            external_id: payment.id,
+            utm: {}
+          })
+        }).catch(e => console.error('Error sending sales-portal CRM webhook:', e));
+      }
+    } catch (err) {
+      console.error('Failed to send sales-portal CRM webhook:', err);
+    }
+  } catch (error) {
+    console.error('Failed to create sales-portal deal:', error);
+    res.status(500).json({ error: 'Mollie API Error', details: error.message });
+  }
+});
+
+/**
  * List the most recent paid first-year deals from Mollie with their
  * email-send history pulled from the DB email log.
  */
 app.get('/api/deals', authMiddleware, async (req, res) => {
   const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
   try {
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const deals = [];
     for await (const p of mollieClient.payments.iterate()) {
       if (p.status !== 'paid') continue;
@@ -884,7 +1063,7 @@ function pickLatest(entries, type) {
  */
 app.get('/api/deals/:id', authMiddleware, async (req, res) => {
   try {
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const p = await mollieClient.payments.get(req.params.id);
     const logs = await db.getEmailLogForPayments([p.id]);
     const overrides = await db.getDealOverrides(p.id);
@@ -932,12 +1111,12 @@ app.put('/api/deals/:id/metadata', authMiddleware, async (req, res) => {
  */
 app.get('/api/deals/:id/opdracht.xlsx', authMiddleware, async (req, res) => {
   try {
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const p = await mollieClient.payments.get(req.params.id);
     if (!p.metadata) return res.status(400).send('No metadata on payment');
 
     const meta = await mergedMetadata(p);
-    const xlsxBuffer = opdracht.fillXlsx(meta, p.status === 'paid');
+    const xlsxBuffer = opdracht.fillXlsx(meta, p.status === 'paid', meta.tenant || req.tenant);
 
     const business = (meta.businessName || meta.customerName || 'klant').replace(/[^a-z0-9]+/gi, '_');
     const filename = `Opdrachtformulier - ${business} - ${new Date(p.createdAt).toISOString().slice(0, 10)}.xlsx`;
@@ -960,15 +1139,16 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
     : ['internal', 'customer', 'accountant', 'crm'];
 
   try {
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     const p = await mollieClient.payments.get(req.params.id);
     if (!p.metadata) return res.status(400).json({ error: 'No metadata on payment' });
 
     const meta = await mergedMetadata(p);
+    const dealTenant = meta.tenant || req.tenant;
     const results = {};
 
     if (wanted.includes('crm')) {
-      const cfg = await getConfig(req.tenant);
+      const cfg = await getConfig(dealTenant);
       const crmUrl = cfg.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       const crmSecret = cfg.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       try {
@@ -986,10 +1166,10 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     if (wanted.includes('internal')) {
       try {
-        await sendInternalNotification(meta, req.tenant);
+        await sendInternalNotification(meta, dealTenant);
         results.internal = { status: 'sent' };
         await db.logEmail({ paymentId: p.id, type: 'internal',
-          recipient: (await getConfig(req.tenant)).smtpTo || 'info@klantenvertellen.nl',
+          recipient: (await getConfig(dealTenant)).smtpTo || 'info@klantenvertellen.nl',
           status: 'sent', source: 'manual' });
       } catch (err) {
         results.internal = { status: 'failed', error: err.message };
@@ -1000,12 +1180,12 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     if (wanted.includes('customer')) {
       try {
-        const signupBuilder = getTenantSignupBuilder(req.tenant);
-        const cfg = await getConfig(req.tenant);
-        const kvSignupUrl = req.tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
-        const base = cfg[kvSignupUrl] || (req.tenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
+        const signupBuilder = getTenantSignupBuilder(dealTenant);
+        const cfg = await getConfig(dealTenant);
+        const kvSignupUrl = dealTenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
+        const base = cfg[kvSignupUrl] || (dealTenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
         const signupUrl = signupBuilder.buildSignupUrl(meta, base || undefined);
-        await sendCustomerWelcome(meta, signupUrl, req.tenant);
+        await sendCustomerWelcome(meta, signupUrl, dealTenant);
         results.customer = { status: 'sent', recipient: meta.customerEmail };
         await db.logEmail({ paymentId: p.id, type: 'customer',
           recipient: meta.customerEmail, status: 'sent', source: 'manual' });
@@ -1019,9 +1199,9 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     if (wanted.includes('accountant')) {
       try {
-        const mailer = await getSmtpTransporter();
+        const mailer = await getSmtpTransporter(dealTenant);
         if (!mailer) throw new Error('SMTP not configured');
-        await opdracht.sendToAccountant(meta, p.status === 'paid', mailer);
+        await opdracht.sendToAccountant(meta, p.status === 'paid', mailer, dealTenant);
         results.accountant = { status: 'sent', recipient: 'administratie@kv-review.nl' };
         await db.logEmail({ paymentId: p.id, type: 'accountant',
           recipient: 'administratie@kv-review.nl', status: 'sent', source: 'manual' });
@@ -1050,7 +1230,7 @@ app.get('/pay-invoice', async (req, res) => {
       return res.status(400).send('<h1>Foutieve link</h1><p>Ontbrekende gegevens in de link (factuurnummer, bedrag of email).</p>');
     }
 
-    const mollieClient = await getMollieClient();
+    const mollieClient = await getMollieClient(req.tenant);
     
     // 1. Create a Mollie Customer (consistent with the app's standard checkout pattern)
     const customer = await mollieClient.customers.create({
@@ -1074,8 +1254,9 @@ app.get('/pay-invoice', async (req, res) => {
       description: invoice_id, // Reconciliation key for Exact
       redirectUrl: `${baseUrl}/success.html`,
       cancelUrl: `${baseUrl}/cancel.html`,
-      webhookUrl: `${baseUrl}/api/webhook`,
+      webhookUrl: `${baseUrl}/api/webhook?tenant=${req.tenant}`,
       metadata: {
+        tenant: req.tenant,
         invoice_id,
         packageId: packageId || 'Pakket',
         yearlyAmount: parseFloat(amount).toFixed(2),

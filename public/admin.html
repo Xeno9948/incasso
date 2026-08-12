@@ -203,6 +203,7 @@
         <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
         
         <div class="section-label">Overzicht</div>
+        <a href="#" onclick="showSection('newdeal', this)"><i class="fas fa-plus-circle"></i> Nieuwe Deal</a>
         <a href="#" onclick="showSection('deals', this)"><i class="fas fa-file-invoice"></i> Deals & Mails</a>
         <a href="#" onclick="showSection('subscribers', this)"><i class="fas fa-users"></i> Abonnementen</a>
         
@@ -425,6 +426,110 @@
               
               <button class="icon-btn" onclick="cancel2FASetup()" style="margin-top: 20px; font-size: 0.8rem;">Annuleren</button>
            </div>
+        </div>
+      </section>
+
+      <!-- New Deal / Sales Portal -->
+      <section id="section-newdeal" class="section">
+        <h2>Nieuwe Deal</h2>
+        <p class="section-desc">Maak een incasso-link met een eigen prijs voor een klant. Handig als er geen vaste tarieven gepubliceerd worden (bijv. Klantenvertellen) of bij maatwerkprijzen.</p>
+
+        <div class="item-card open">
+          <div class="item-card-body" style="display:block; padding-top:20px;">
+            <h3 style="margin-bottom:4px; font-size:0.95rem;">Klantgegevens</h3>
+            <div class="field-grid">
+              <div class="field full">
+                <label>Contactpersoon</label>
+                <input type="text" id="nd-customer-name" placeholder="Voornaam Achternaam">
+              </div>
+              <div class="field">
+                <label>Bedrijfsnaam</label>
+                <input type="text" id="nd-business-name">
+              </div>
+              <div class="field">
+                <label>KVK-nummer</label>
+                <input type="text" id="nd-kvk">
+              </div>
+              <div class="field">
+                <label>BTW-nummer</label>
+                <input type="text" id="nd-btw">
+              </div>
+              <div class="field full">
+                <label>Adres</label>
+                <input type="text" id="nd-address" placeholder="Straat & huisnummer">
+              </div>
+              <div class="field">
+                <label>Postcode</label>
+                <input type="text" id="nd-postal">
+              </div>
+              <div class="field">
+                <label>Plaats</label>
+                <input type="text" id="nd-city">
+              </div>
+              <div class="field">
+                <label>Land</label>
+                <input type="text" id="nd-country" value="NL">
+              </div>
+              <div class="field">
+                <label>Website</label>
+                <input type="url" id="nd-website" placeholder="https://...">
+              </div>
+              <div class="field">
+                <label>E-mailadres</label>
+                <input type="email" id="nd-email">
+              </div>
+              <div class="field">
+                <label>Telefoonnummer</label>
+                <input type="tel" id="nd-phone">
+              </div>
+            </div>
+
+            <h3 style="margin:24px 0 4px; font-size:0.95rem;">Pakket &amp; Prijs</h3>
+            <div class="field-grid">
+              <div class="field">
+                <label>Pakketnaam</label>
+                <input type="text" id="nd-package-name" placeholder="bijv. Pro">
+              </div>
+              <div class="field">
+                <label>Prijs per maand (excl. BTW)</label>
+                <input type="number" id="nd-monthly-price" step="0.01" min="0" placeholder="45.00" oninput="updateNdPricePreview()">
+              </div>
+              <div class="field full">
+                <label>Extra modules (optioneel, komma-gescheiden)</label>
+                <input type="text" id="nd-modules" placeholder="bijv. XML-feed, QR Code Reviews">
+              </div>
+              <div class="field full">
+                <label>Omschrijving op afschrift (optioneel)</label>
+                <input type="text" id="nd-description" placeholder="Laat leeg voor standaardtekst">
+              </div>
+            </div>
+
+            <div id="nd-price-preview" style="margin-top:16px; padding:14px 16px; background:#fafafa; border-radius:10px; font-size:0.85rem; color:#555;">
+              Vul een maandprijs in om het jaarbedrag te berekenen.
+            </div>
+
+            <div class="checkbox-group" style="margin-top:20px;">
+              <label class="checkbox-item">
+                <input type="checkbox" id="nd-send-email">
+                Stuur betaallink direct per e-mail naar klant
+              </label>
+            </div>
+
+            <button class="save-btn" style="margin-top:24px;" onclick="createDeal()" id="nd-submit-btn">
+              <i class="fas fa-link"></i> Incasso-link genereren
+            </button>
+
+            <div id="nd-result" style="display:none; margin-top:20px; padding:16px; background:rgba(104,176,61,0.08); border:1px solid rgba(104,176,61,0.3); border-radius:10px;">
+              <div style="font-weight:600; color:#68b03d; margin-bottom:8px;"><i class="fas fa-check-circle"></i> Link aangemaakt</div>
+              <div style="display:flex; gap:8px;">
+                <input type="text" id="nd-result-link" readonly style="flex:1;">
+                <button class="copy-btn" onclick="copyDealLink()">Kopiëren</button>
+              </div>
+              <div id="nd-email-status" style="margin-top:8px; font-size:0.8rem; color:#888;"></div>
+            </div>
+
+            <div id="nd-error" style="display:none; margin-top:20px; padding:16px; background:rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.3); border-radius:10px; color:#c0392b; font-size:0.85rem;"></div>
+          </div>
         </div>
       </section>
 
@@ -1530,6 +1635,105 @@ function copyEmbed() {
   textarea.select();
   document.execCommand('copy');
   alert('Code gekopieerd naar klembord!');
+}
+
+// ── NIEUWE DEAL (SALES PORTAL) ─────────────────────────────────────────
+function updateNdPricePreview() {
+  const monthly = parseFloat(document.getElementById('nd-monthly-price').value);
+  const preview = document.getElementById('nd-price-preview');
+  if (!monthly || monthly <= 0) {
+    preview.textContent = 'Vul een maandprijs in om het jaarbedrag te berekenen.';
+    return;
+  }
+  const vatPct = (config && config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '')
+    ? parseFloat(config.vatPercentage) : 21;
+  const yearlyExcl = monthly * 12;
+  const vatAmount = yearlyExcl * (vatPct / 100);
+  const yearlyIncl = yearlyExcl + vatAmount;
+  preview.innerHTML = `Jaarbedrag excl. BTW: <strong>€${yearlyExcl.toFixed(2)}</strong> &nbsp;·&nbsp; `
+    + `BTW (${vatPct}%): <strong>€${vatAmount.toFixed(2)}</strong> &nbsp;·&nbsp; `
+    + `Totaal incl. BTW: <strong style="color:#68b03d;">€${yearlyIncl.toFixed(2)}</strong>`;
+}
+
+async function createDeal() {
+  const pName   = document.getElementById('nd-customer-name').value.trim();
+  const bName   = document.getElementById('nd-business-name').value.trim();
+  const kvk     = document.getElementById('nd-kvk').value.trim();
+  const btw     = document.getElementById('nd-btw').value.trim();
+  const address = document.getElementById('nd-address').value.trim();
+  const postal  = document.getElementById('nd-postal').value.trim();
+  const city    = document.getElementById('nd-city').value.trim();
+  const country = document.getElementById('nd-country').value.trim() || 'NL';
+  const website = document.getElementById('nd-website').value.trim();
+  const email   = document.getElementById('nd-email').value.trim();
+  const phone   = document.getElementById('nd-phone').value.trim();
+  const packageName  = document.getElementById('nd-package-name').value.trim();
+  const monthlyPrice = document.getElementById('nd-monthly-price').value;
+  const modulesList  = document.getElementById('nd-modules').value.trim();
+  const description  = document.getElementById('nd-description').value.trim();
+  const sendEmail    = document.getElementById('nd-send-email').checked;
+
+  const ndError  = document.getElementById('nd-error');
+  const ndResult = document.getElementById('nd-result');
+  ndError.style.display = 'none';
+  ndResult.style.display = 'none';
+
+  if (!pName || !bName || !email) {
+    ndError.textContent = 'Contactpersoon, bedrijfsnaam en e-mailadres zijn verplicht.';
+    ndError.style.display = 'block';
+    return;
+  }
+  if (!monthlyPrice || parseFloat(monthlyPrice) <= 0) {
+    ndError.textContent = 'Vul een geldige prijs per maand in.';
+    ndError.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('nd-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Bezig…';
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenant = urlParams.get('tenant') || 'kiyoh';
+
+    const res = await fetch(`/api/admin/create-deal?tenant=${tenant}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': password },
+      body: JSON.stringify({
+        customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone },
+        packageName, monthlyPrice, modulesList, description, sendEmail
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Onbekende fout');
+
+    document.getElementById('nd-result-link').value = data.checkoutUrl;
+    const emailStatus = document.getElementById('nd-email-status');
+    if (sendEmail) {
+      emailStatus.textContent = data.emailSent
+        ? `E-mail verstuurd naar ${email}.`
+        : `E-mail versturen mislukt: ${data.emailError || 'onbekende fout'}.`;
+      emailStatus.style.color = data.emailSent ? '#68b03d' : '#c0392b';
+    } else {
+      emailStatus.textContent = '';
+    }
+    ndResult.style.display = 'block';
+  } catch (err) {
+    ndError.textContent = 'Aanmaken mislukt: ' + err.message;
+    ndError.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-link"></i> Incasso-link genereren';
+  }
+}
+
+function copyDealLink() {
+  const input = document.getElementById('nd-result-link');
+  input.select();
+  document.execCommand('copy');
+  alert('Link gekopieerd naar klembord!');
 }
 
 function logout() {
