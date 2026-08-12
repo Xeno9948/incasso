@@ -55,40 +55,40 @@
       "name": "XML-feed Integratie",
       "price": 20,
       "description": "Publiceer reviews in eigen huisstijl met automatische synchronisatie op je website of in mailings.",
-      "image": "https://kiyoh.com/wp-content/uploads/xml-met-muis.gif",
-      "link": "https://kiyoh.com/kiyoh-xml-feed-automatische-reviewkoppeling-voor-jouw-website/"
+      "image": "https://klantenvertellen.nl/wp-content/uploads/xml-met-muis.gif",
+      "link": "https://klantenvertellen.nl/klantenvertellen-xml-feed-automatische-reviewkoppeling-voor-jouw-website/"
     },
     {
       "id": "easy-click",
       "name": "Easy Click Module",
       "price": 10,
       "description": "Laat klanten via één simpele klik direct in de e-mail een score geven. Verhoogt respons met 11%.",
-      "image": "https://kiyoh.com/wp-content/uploads/2024/09/easy-click.svg",
-      "link": "https://kiyoh.com/ons-reviewsysteem-features-2/"
+      "image": "https://klantenvertellen.nl/wp-content/uploads/2024/09/easy-click.svg",
+      "link": "https://klantenvertellen.nl/ons-reviewsysteem-features-2/"
     },
     {
       "id": "personal-invite-link",
       "name": "Personal Invite Link",
       "price": 15,
       "description": "Verstuur gepersonaliseerde uitnodigingen via WhatsApp, SMS, Facebook, met unieke review links.",
-      "image": "https://kiyoh.com/wp-content/uploads/reviewlink.gif",
-      "link": "https://kiyoh.com/verzamel-reviews-met-een-unieke-reviewlink/"
+      "image": "https://klantenvertellen.nl/wp-content/uploads/reviewlink.gif",
+      "link": "https://klantenvertellen.nl/verzamel-reviews-met-een-unieke-reviewlink/"
     },
     {
       "id": "productreviews",
       "name": "Productreviews",
       "price": 25,
       "description": "Verzamel reviews op productniveau en val extra op in Google Shopping. Minder retouren.",
-      "image": "https://kiyoh.com/wp-content/uploads/2024/09/product-reviews.svg",
-      "link": "https://kiyoh.com/product-review/"
+      "image": "https://klantenvertellen.nl/wp-content/uploads/2024/09/product-reviews.svg",
+      "link": "https://klantenvertellen.nl/product-review/"
     },
     {
       "id": "qr-code",
       "name": "QR Code Reviews",
       "price": 10,
       "description": "Laat in je fysieke winkel een QR-code scannen. Perfect voor offline promotie en deurbestickering.",
-      "image": "https://kiyoh.com/wp-content/uploads/Qr-Code-Anmated-Web.gif",
-      "link": "https://www.kiyoh.com/qr-code/"
+      "image": "https://klantenvertellen.nl/wp-content/uploads/Qr-Code-Anmated-Web.gif",
+      "link": "https://www.klantenvertellen.nl/qr-code/"
     },
     {
       "id": "new-1773240469889",
@@ -105,42 +105,42 @@
       "icon": "fas fa-star",
       "title": "Shop Reviews",
       "description": "Met Shop Reviews begint het allemaal. Zowel consumenten als zakelijke kopers willen zeker weten dat zij met een betrouwbare leverancier te maken hebben. Laat zien dat je betrouwbaar bent!",
-      "link": "https://kiyoh.com/features-aanvragen/"
+      "link": "https://klantenvertellen.nl/features-aanvragen/"
     },
     {
       "id": "widget",
       "icon": "fas fa-magic",
       "title": "Kies jouw perfecte widget",
       "description": "Naast onze vertrouwde standaard widget bieden we een breed scala aan widgets aan. Kies eenvoudig de stijl die het beste past bij jouw website design en kopieer simpelweg de widgetcode.",
-      "link": "https://kiyoh.com/features-aanvragen/"
+      "link": "https://klantenvertellen.nl/features-aanvragen/"
     },
     {
       "id": "auto-collect",
       "icon": "fas fa-envelope-open-text",
       "title": "Auto Collect (BCC)",
       "description": "BCC betekent Blind Carbon Copy. Naar aanleiding van een BCC kopie van je uitgaande mails kunnen wij volledig automatisch een reviewverzoek naar je klant versturen of inplannen.",
-      "link": "https://kiyoh.com/features-aanvragen/"
+      "link": "https://klantenvertellen.nl/features-aanvragen/"
     },
     {
       "id": "foto-module",
       "icon": "fas fa-camera",
       "title": "Foto module",
       "description": "Gebruik je reviews als portfolio! Vul je reviews aan met foto's van de klant. Deze reviews geven een direct beeld van o.a. interieurartikelen of bouwprojecten als extra inspiratie.",
-      "link": "https://kiyoh.com/features-aanvragen/"
+      "link": "https://klantenvertellen.nl/features-aanvragen/"
     },
     {
       "id": "offline-promotie",
       "icon": "fas fa-bullhorn",
       "title": "Offline promotie",
       "description": "Laat je review score ook offline spreken. Overweeg een baliestandaard, auto- of deursticker, of poster. Overtuig klanten in je showroom of wachtruimte met fysieke promotiemiddelen.",
-      "link": "https://kiyoh.com/offline-promotie/"
+      "link": "https://klantenvertellen.nl/offline-promotie/"
     },
     {
       "id": "reviewsplit",
       "icon": "fas fa-columns",
       "title": "Reviewsplit",
-      "description": "Verdeel je reviews over platforms als Kiyoh, Google en Facebook voor maximale zichtbaarheid en online aanwezigheid.",
-      "link": "https://kiyoh.com/kiyoh-reviewsplit-meer-zichtbaarheid-via-google-facebook-en-kiyoh/"
+      "description": "Verdeel je reviews over platforms als Klantenvertellen, Google en Facebook voor maximale zichtbaarheid en online aanwezigheid.",
+      "link": "https://klantenvertellen.nl/klantenvertellen-reviewsplit-meer-zichtbaarheid-via-google-facebook-en-klantenvertellen/"
     }
   ],
   "googleAdsConversionId": "",
@@ -155,6 +155,6 @@
   "smtpUser": "",
   "smtpPass": "",
   "smtpFrom": "",
-  "smtpTo": "info@kiyoh.nl",
-  "kiyohSignupUrl": "https://kiyoh.com/signup"
+  "smtpTo": "info@klantenvertellen.nl",
+  "kvSignupUrl": "https://klantenvertellen.nl/signup"
 }

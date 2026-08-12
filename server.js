@@ -4,6 +4,7 @@ const cors = require('cors');
 const QRCode = require('qrcode');
 const exact = require('./exact');
 const kiyoh = require('./kiyoh');
+const klantenvertellen = require('./klantenvertellen');
 const opdracht = require('./opdracht');
 const crm = require('./crm');
 const { rateLimit } = require('express-rate-limit');
@@ -42,7 +43,7 @@ async function getSmtpTransporter() {
   return { transporter, from: `"Kiyoh Betalingen" <${smtpFrom}>`, to: smtpTo };
 }
 
-async function sendInternalNotification(metadata) {
+async function sendInternalNotification(metadata, tenant = 'kiyoh') {
   const mailer = await getSmtpTransporter();
   if (!mailer) {
     console.log('SMTP not configured — skipping internal notification email.');
@@ -55,12 +56,14 @@ async function sendInternalNotification(metadata) {
 
   const moduleArr = (modulesList || '').split(',').map(s => s.trim()).filter(Boolean);
   const hasExtraModules = moduleArr.length > 0;
+  const tenantName = getTenantName(tenant);
+  const brandColor = getTenantBrandColor(tenant);
 
   const extraModulesBlock = hasExtraModules ? `
         <div style="margin-top:24px;padding:16px;background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;">
           <strong style="color:#7a5b00;">⚠️ Extra modules nog activeren</strong>
           <p style="margin:8px 0 0;color:#5a4400;font-size:14px;">
-            Deze klant heeft de volgende extra modules afgenomen die nog handmatig aangezet moeten worden in het Kiyoh-platform:
+            Deze klant heeft de volgende extra modules afgenomen die nog handmatig aangezet moeten worden in het ${tenantName}-platform:
           </p>
           <ul style="margin:8px 0 0;color:#5a4400;font-size:14px;">
             ${moduleArr.map(m => `<li>${m}</li>`).join('')}
@@ -68,11 +71,9 @@ async function sendInternalNotification(metadata) {
         </div>
       ` : '';
 
-  const kiyohBlock = '';
-
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-      <div style="background:#f58220;padding:24px 32px;border-radius:10px 10px 0 0;">
+      <div style="background:${brandColor};padding:24px 32px;border-radius:10px 10px 0 0;">
         <h2 style="color:white;margin:0;">✅ Nieuw abonnement afgesloten</h2>
       </div>
       <div style="background:#fff;border:1px solid #eee;border-top:none;padding:32px;border-radius:0 0 10px 10px;">
@@ -98,10 +99,9 @@ async function sendInternalNotification(metadata) {
           <tr><td style="padding:10px 0;color:#888;">Omschrijving</td><td style="padding:10px 0;">${description || '—'}</td></tr>
         </table>
         ${extraModulesBlock}
-        ${kiyohBlock}
 
         <div style="margin-top:24px;padding:16px;background:#f9f9f9;border-radius:8px;font-size:12px;color:#aaa;">
-          Dit is een automatisch bericht van het Kiyoh betalingssysteem.
+          Dit is een automatisch bericht van het ${tenantName} betalingssysteem.
         </div>
       </div>
     </div>
@@ -117,14 +117,17 @@ async function sendInternalNotification(metadata) {
   console.log(`Internal notification email sent to ${mailer.to}`);
 }
 
-async function sendCustomerWelcome(metadata, signupUrl) {
+async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
   const mailer = await getSmtpTransporter();
   if (!mailer || !metadata.customerEmail) return;
 
+  const tenantName = getTenantName(tenant);
+  const brandColor = getTenantBrandColor(tenant);
+
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-      <div style="background:#f58220;padding:24px 32px;border-radius:10px 10px 0 0;">
-        <h2 style="color:white;margin:0;">Welkom bij Kiyoh!</h2>
+      <div style="background:${brandColor};padding:24px 32px;border-radius:10px 10px 0 0;">
+        <h2 style="color:white;margin:0;">Welkom bij ${tenantName}!</h2>
       </div>
       <div style="background:#fff;border:1px solid #eee;border-top:none;padding:32px;border-radius:0 0 10px 10px;font-size:14px;color:#333;">
         <p>Hi ${metadata.customerName || ''},</p>
@@ -132,14 +135,14 @@ async function sendCustomerWelcome(metadata, signupUrl) {
         ${signupUrl ? `
           <p>Maak nu in één minuut je account aan — je gegevens staan al voor je klaar:</p>
           <p style="text-align:center;margin:24px 0;">
-            <a href="${signupUrl}" style="background:#f58220;color:white;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">Account aanmaken</a>
+            <a href="${signupUrl}" style="background:${brandColor};color:white;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">Account aanmaken</a>
           </p>
           <p style="font-size:12px;color:#888;word-break:break-all;">Of plak deze link in je browser: ${signupUrl}</p>
         ` : `
           <p>Ons team neemt binnen 1 werkdag contact op om je account in te richten.</p>
         `}
         <p>Vragen? Reageer gewoon op deze mail.</p>
-        <p style="margin-top:24px;">— Het Kiyoh team</p>
+        <p style="margin-top:24px;">— Het ${tenantName} team</p>
       </div>
     </div>
   `;
@@ -147,7 +150,7 @@ async function sendCustomerWelcome(metadata, signupUrl) {
   await mailer.transporter.sendMail({
     from: mailer.from,
     to: metadata.customerEmail,
-    subject: 'Welkom bij Kiyoh — maak je account aan',
+    subject: `Welkom bij ${tenantName} — maak je account aan`,
     html
   });
 
@@ -156,24 +159,66 @@ async function sendCustomerWelcome(metadata, signupUrl) {
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
+
+// ─── TENANT DETECTION ─────────────────────────────────────────────────────────
+function detectTenant(hostname) {
+  // Extract base domain without port
+  const host = hostname.split(':')[0].toLowerCase();
+
+  if (host.includes('klantenvertellen')) {
+    return 'klantenvertellen';
+  }
+
+  // Default to kiyoh
+  return 'kiyoh';
+}
+
+function getTenantConfigPath(tenant) {
+  if (tenant === 'klantenvertellen') {
+    return path.join(__dirname, 'config.klantenvertellen.json');
+  }
+  return CONFIG_PATH;
+}
+
+function getTenantSignupBuilder(tenant) {
+  if (tenant === 'klantenvertellen') {
+    return klantenvertellen;
+  }
+  return kiyoh;
+}
+
+function getTenantName(tenant) {
+  if (tenant === 'klantenvertellen') {
+    return 'Klantenvertellen';
+  }
+  return 'Kiyoh';
+}
+
+function getTenantBrandColor(tenant) {
+  if (tenant === 'klantenvertellen') {
+    return '#0066cc';
+  }
+  return '#f58220'; // Kiyoh orange
+}
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kiyoh-admin-2024';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Helper to read config with fallback
-async function getConfig() {
+async function getConfig(tenant = 'kiyoh') {
   let localConfig = { packages: [], modules: [], coreFeatures: [] };
-  
+  const configPath = getTenantConfigPath(tenant);
+
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      localConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    if (fs.existsSync(configPath)) {
+      localConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     } else if (fs.existsSync(CONFIG_EXAMPLE_PATH)) {
       console.log('Using example config fallback');
       localConfig = JSON.parse(fs.readFileSync(CONFIG_EXAMPLE_PATH, 'utf8'));
     }
   } catch (err) {
-    console.error('Error reading local config:', err);
+    console.error('Error reading local config for tenant ' + tenant + ':', err);
   }
 
   // Load from DB if available, otherwise return local config
@@ -184,10 +229,31 @@ async function getConfig() {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Tenant detection middleware
+app.use((req, res, next) => {
+  req.tenant = detectTenant(req.hostname);
+  req.tenantName = getTenantName(req.tenant);
+  req.tenantBrandColor = getTenantBrandColor(req.tenant);
+  next();
+});
+
 app.use((req, res, next) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   next();
 });
+
+// Serve tenant-specific HTML files
+app.get('/', (req, res) => {
+  const htmlFile = req.tenant === 'klantenvertellen' ? 'index.klantenvertellen.html' : 'index.html';
+  res.sendFile(path.join(__dirname, 'public', htmlFile));
+});
+
+app.get('/admin', (req, res) => {
+  const htmlFile = req.tenant === 'klantenvertellen' ? 'admin.klantenvertellen.html' : 'admin.html';
+  res.sendFile(path.join(__dirname, 'public', htmlFile));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Rate Limiting for sensitive routes
@@ -228,26 +294,26 @@ async function getMollieClient() {
 
 // Setup Config API Routes
 app.get('/api/config', async (req, res) => {
-  res.json(await getConfig());
+  res.json(await getConfig(req.tenant));
 });
 
 app.post('/api/auth', authLimiter, async (req, res) => {
   const { password } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
-  
-  const config = await getConfig();
+
+  const config = await getConfig(req.tenant);
   if (config.twoFactorEnabled && config.twoFactorSecret) {
     return res.json({ ok: true, twoFactorRequired: true });
   }
-  
+
   res.json({ ok: true, twoFactorRequired: false });
 });
 
 app.post('/api/auth/2fa', authLimiter, async (req, res) => {
   const { password, code } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
-  
-  const config = await getConfig();
+
+  const config = await getConfig(req.tenant);
   if (!config.twoFactorEnabled || !config.twoFactorSecret) {
     return res.status(400).json({ error: '2FA not enabled' });
   }
@@ -278,17 +344,18 @@ app.get('/api/2fa/setup', authMiddleware, async (req, res) => {
 app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
   const { secret, code } = req.body;
   const isValid = await authenticator.verify(code, { secret });
-  
+
   if (!isValid) {
     return res.status(401).json({ error: 'Invalid code' });
   }
-  
-  const config = await getConfig();
+
+  const config = await getConfig(req.tenant);
   config.twoFactorSecret = secret;
   config.twoFactorEnabled = true;
-  
+
   try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    const configPath = getTenantConfigPath(req.tenant);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     await db.saveSettings(config);
     res.json({ success: true });
   } catch (err) {
@@ -297,12 +364,13 @@ app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/2fa/disable', authMiddleware, async (req, res) => {
-  const config = await getConfig();
+  const config = await getConfig(req.tenant);
   config.twoFactorEnabled = false;
   config.twoFactorSecret = null;
-  
+
   try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    const configPath = getTenantConfigPath(req.tenant);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     await db.saveSettings(config);
     res.json({ success: true });
   } catch (err) {
@@ -312,15 +380,16 @@ app.post('/api/2fa/disable', authMiddleware, async (req, res) => {
 
 app.post('/api/config', authLimiter, authMiddleware, async (req, res) => {
   const { password, ...config } = req.body;
-  // password in body is now optional since it's checked in header, 
+  // password in body is now optional since it's checked in header,
   // but we keep it for backward compatibility if needed, though middleware already checked headers.
   try {
     // 1. Save to local file (for local dev/backups)
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    
+    const configPath = getTenantConfigPath(req.tenant);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
     // 2. Save to Database (for Railway persistence)
     await db.saveSettings(config);
-    
+
     res.json({ success: true, db: db.isDbEnabled });
   } catch (err) {
     console.error('Save error:', err);
@@ -377,11 +446,11 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     // Load config for dynamic settings
-    const config = await getConfig();
+    const config = await getConfig(req.tenant);
 
     const methods = config.mollieMethods ? config.mollieMethods.split(',').map(m => m.trim()) : ['ideal', 'creditcard', 'bancontact'];
     const interval = config.mollieInterval || '12 months';
-    let descriptionTemplate = config.mollieDescription || 'Kiyoh Abonnement: {PACKAGE}';
+    let descriptionTemplate = config.mollieDescription || `${getTenantName(req.tenant)} Abonnement: {PACKAGE}`;
 
     // VERY IMPORTANT: Calculate total on the backend to prevent tampering
     let calculatedTotal = package.price;
@@ -468,7 +537,7 @@ app.post('/api/checkout', async (req, res) => {
     // ─── FIRE CRM WEBHOOK (OPVOLGEN) ──────────────────────────────────
     // Send to CRM immediately so we have the lead even if they abandon Mollie checkout
     try {
-      const config = await getConfig();
+      const config = await getConfig(req.tenant);
 
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
@@ -533,9 +602,9 @@ app.post('/api/webhook', async (req, res) => {
     // Retrieve payment details from Mollie to verify its status
     const mollieClient = await getMollieClient();
     const payment = await mollieClient.payments.get(paymentId);
-    
+
     // Load config inside webhook to ensure it's not stale
-    const config = await getConfig();
+    const config = await getConfig(req.tenant);
 
 
     // If this is a successful payment
@@ -615,23 +684,25 @@ app.post('/api/webhook', async (req, res) => {
           status: 'skipped', error: 'crmWebhookUrl not configured', source: 'webhook' });
       }
 
-      // ─── BUILD KIYOH SIGNUP URL FOR CUSTOMER ──────────────────────────
+      // ─── BUILD SIGNUP URL FOR CUSTOMER ──────────────────────────────────
       let signupUrl = null;
       if (!payment.metadata.invoice_id) {
         try {
-          const cfg = await getConfig();
-          const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
-          signupUrl = kiyoh.buildSignupUrl(payment.metadata, base || undefined);
+          const signupBuilder = getTenantSignupBuilder(req.tenant);
+          const cfg = await getConfig(req.tenant);
+          const kvSignupUrl = req.tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
+          const base = cfg[kvSignupUrl] || (req.tenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
+          signupUrl = signupBuilder.buildSignupUrl(payment.metadata, base || undefined);
         } catch (err) {
-          console.error('Failed to build Kiyoh signup URL:', err.message);
+          console.error(`Failed to build ${req.tenant} signup URL:`, err.message);
         }
       }
 
       // ─── SEND INTERNAL NOTIFICATION EMAIL ────────────────────────────
       try {
-        await sendInternalNotification(payment.metadata);
+        await sendInternalNotification(payment.metadata, req.tenant);
         await db.logEmail({ paymentId: payment.id, type: 'internal',
-          recipient: (await getConfig()).smtpTo || 'info@klantenvertellen.nl',
+          recipient: (await getConfig(req.tenant)).smtpTo || 'info@klantenvertellen.nl',
           status: 'sent', source: 'webhook' });
       } catch (err) {
         console.error('Failed to send internal notification email:', err.message);
@@ -642,7 +713,7 @@ app.post('/api/webhook', async (req, res) => {
       // ─── SEND CUSTOMER WELCOME / SETUP EMAIL ─────────────────────────
       if (!payment.metadata.invoice_id) {
         try {
-          await sendCustomerWelcome(payment.metadata, signupUrl);
+          await sendCustomerWelcome(payment.metadata, signupUrl, req.tenant);
           await db.logEmail({ paymentId: payment.id, type: 'customer',
             recipient: payment.metadata.customerEmail,
             status: 'sent', source: 'webhook' });
@@ -903,7 +974,7 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
     const results = {};
 
     if (wanted.includes('crm')) {
-      const cfg = await getConfig();
+      const cfg = await getConfig(req.tenant);
       const crmUrl = cfg.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       const crmSecret = cfg.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       try {
@@ -921,10 +992,10 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     if (wanted.includes('internal')) {
       try {
-        await sendInternalNotification(meta);
+        await sendInternalNotification(meta, req.tenant);
         results.internal = { status: 'sent' };
         await db.logEmail({ paymentId: p.id, type: 'internal',
-          recipient: (await getConfig()).smtpTo || 'info@klantenvertellen.nl',
+          recipient: (await getConfig(req.tenant)).smtpTo || 'info@klantenvertellen.nl',
           status: 'sent', source: 'manual' });
       } catch (err) {
         results.internal = { status: 'failed', error: err.message };
@@ -935,10 +1006,12 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
 
     if (wanted.includes('customer')) {
       try {
-        const cfg = await getConfig();
-        const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
-        const signupUrl = kiyoh.buildSignupUrl(meta, base || undefined);
-        await sendCustomerWelcome(meta, signupUrl);
+        const signupBuilder = getTenantSignupBuilder(req.tenant);
+        const cfg = await getConfig(req.tenant);
+        const kvSignupUrl = req.tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
+        const base = cfg[kvSignupUrl] || (req.tenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
+        const signupUrl = signupBuilder.buildSignupUrl(meta, base || undefined);
+        await sendCustomerWelcome(meta, signupUrl, req.tenant);
         results.customer = { status: 'sent', recipient: meta.customerEmail };
         await db.logEmail({ paymentId: p.id, type: 'customer',
           recipient: meta.customerEmail, status: 'sent', source: 'manual' });
@@ -1064,7 +1137,7 @@ app.get('/api/qr/invoice', async (req, res) => {
 // ─── SMTP TEST EMAIL ROUTE ───────────────────────────────────────────────────
 app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
   try {
-    const config = await getConfig();
+    const config = await getConfig(req.tenant);
 
     const smtpHost = config.smtpHost || process.env.SMTP_HOST;
     const smtpPort = parseInt(config.smtpPort || process.env.SMTP_PORT || '465', 10);
@@ -1138,11 +1211,23 @@ app.get('/api/exact/callback', async (req, res) => {
  * gets stripped or the customer asks for it again.
  */
 app.get('/kiyoh-setup', async (req, res) => {
-  const cfg = await getConfig();
-  const base = cfg.kiyohSignupUrl || process.env.KIYOH_SIGNUP_URL;
+  const cfg = await getConfig(req.tenant);
+  const signupUrlKey = req.tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
+  const envKey = req.tenant === 'klantenvertellen' ? 'KV_SIGNUP_URL' : 'KIYOH_SIGNUP_URL';
+  const base = cfg[signupUrlKey] || process.env[envKey];
   // Pass through any prefilled query params they arrive with.
   const params = new URLSearchParams(req.query);
-  const target = base || 'https://kiyoh.com/signup';
+  const target = base || (req.tenant === 'klantenvertellen' ? 'https://klantenvertellen.nl/signup' : 'https://kiyoh.com/signup');
+  const url = params.toString() ? `${target}?${params.toString()}` : target;
+  res.redirect(url);
+});
+
+app.get('/klantenvertellen-setup', async (req, res) => {
+  const cfg = await getConfig(req.tenant);
+  const base = cfg.kvSignupUrl || process.env.KV_SIGNUP_URL;
+  // Pass through any prefilled query params they arrive with.
+  const params = new URLSearchParams(req.query);
+  const target = base || 'https://klantenvertellen.nl/signup';
   const url = params.toString() ? `${target}?${params.toString()}` : target;
   res.redirect(url);
 });
