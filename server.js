@@ -760,7 +760,12 @@ app.post('/api/webhook', async (req, res) => {
       }
 
       // ─── SEND CUSTOMER WELCOME / SETUP EMAIL ─────────────────────────
-      if (!payment.metadata.invoice_id) {
+      // Sales-portal deals are skipped here: the sales rep already has a
+      // direct line to the customer and sets up the account themselves,
+      // so an automatic "create your account" email would be redundant
+      // (and could even confuse a customer who already has an account).
+      // The admin can still send it manually later via Deals & Mails → Resend.
+      if (!payment.metadata.invoice_id && payment.metadata.source !== 'sales-portal') {
         try {
           await sendCustomerWelcome(payment.metadata, signupUrl, req.tenant);
           await db.logEmail({ paymentId: payment.id, type: 'customer',
@@ -772,6 +777,11 @@ app.post('/api/webhook', async (req, res) => {
             recipient: payment.metadata.customerEmail,
             status: 'failed', error: err.message, source: 'webhook' });
         }
+      } else if (payment.metadata.source === 'sales-portal') {
+        await db.logEmail({ paymentId: payment.id, type: 'customer',
+          recipient: payment.metadata.customerEmail,
+          status: 'skipped', error: 'Sales-portal deal — account wordt handmatig door sales opgezet',
+          source: 'webhook' });
       }
 
       // ─── SEND OPDRACHT-FORMULIER TO ACCOUNTANT ───────────────────────
