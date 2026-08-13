@@ -642,79 +642,113 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-// Setup Webhook to handle successful payments and create subscriptions
+// Setup Webhook to handle successful payments and create subscriptions.
+// Mollie can fire this for open → expired/canceled AND later for paid
+// (e.g. bank transfer, delayed iDEAL). Only status === 'paid' fulfills.
+// Critical steps (CRM Won + confirmation mails) must succeed or we release
+// the claim and return 5xx so Mollie retries.
 app.post('/api/webhook', async (req, res) => {
   try {
     const paymentId = req.body.id;
     if (!paymentId) return res.status(400).send('No id provided');
 
-    // Retrieve payment details from Mollie to verify its status
-    const mollieClient = await getMollieClient(req.tenant);
+    // Prefer tenant from query (?tenant=), else payment metadata after fetch
+    let tenant = req.tenant;
+
+    const mollieClient = await getMollieClient(tenant);
     const payment = await mollieClient.payments.get(paymentId);
 
-    // Load config inside webhook to ensure it's not stale
-    const config = await getConfig(req.tenant);
+    // Correct tenant if Mollie hit the default and metadata has the real one
+    if (payment.metadata && payment.metadata.tenant) {
+      const metaTenant = String(payment.metadata.tenant).toLowerCase();
+      if (metaTenant === 'klantenvertellen' || metaTenant === 'kiyoh') {
+        tenant = metaTenant;
+        req.tenant = tenant;
+      }
+    }
 
+    const config = await getConfig(tenant);
 
-    // If this is a successful payment
     console.log(`Webhook triggered for Payment ID: ${paymentId}. Status: ${payment.status}`);
 
-    if (payment.status === 'paid') {
-      const alreadyProcessed = await db.isPaymentProcessed(paymentId);
-      if (alreadyProcessed) {
-        console.log(`Webhook triggered again for already processed Payment ID: ${paymentId}. Skipping actions.`);
-        return res.status(200).send('OK');
-      }
+    if (payment.status !== 'paid') {
+      // open / pending / expired / canceled / failed — nothing to fulfill yet
+      return res.status(200).send('OK');
+    }
 
-      // Mark it as processed immediately to prevent concurrent races
-      await db.markPaymentProcessed(paymentId);
+    if (!payment.metadata) {
+      console.error(`Payment ${paymentId} is paid but has no metadata — cannot fulfill.`);
+      return res.status(500).send('Missing metadata');
+    }
 
-      console.log('Payment PAID. Processing Won lead...');
-      const { yearlyAmount, description, customerName, businessName, website, customerEmail, customerPhone, modulesList, utms, packageId,
-              businessAddress, businessPostal, businessCity, businessCountry, kvkNumber } = payment.metadata;
-      
-      console.log(`Lead Info: ${customerName} | ${businessName} | ${customerEmail}`);
+    // Atomic claim: only one concurrent webhook runs fulfillment
+    const claimed = await db.tryClaimPayment(paymentId);
+    if (!claimed) {
+      console.log(`Webhook for already claimed/processed Payment ID: ${paymentId}. Skipping.`);
+      return res.status(200).send('OK');
+    }
 
-      // Create subscription ONLY if it was a recurring payment
+    console.log('Payment PAID. Processing Won lead...');
+    const { yearlyAmount, customerName, businessName, customerEmail, packageId } = payment.metadata;
+    console.log(`Lead Info: ${customerName} | ${businessName} | ${customerEmail}`);
+
+    // Track whether critical post-pay steps succeeded. If not, unclaim so
+    // Mollie (or a later paid webhook) can retry instead of silently dropping CRM/mail.
+    let criticalFailed = false;
+    let criticalError = null;
+
+    try {
+      // Create subscription ONLY if it was a recurring first payment
       if (payment.sequenceType === 'first' && payment.customerId && config.molliePaymentType !== 'once') {
-        console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
-        
-        // Calculate the start date for the next billing cycle (defaulting to 12 months for yearly plans)
-        const interval = config.mollieInterval || '12 months';
-        let startDate = new Date();
-        
-        if (interval.includes('months')) {
-          const months = parseInt(interval);
-          startDate.setMonth(startDate.getMonth() + months);
-        } else if (interval.includes('days')) {
-          const days = parseInt(interval);
-          startDate.setDate(startDate.getDate() + days);
-        } else if (interval.includes('weeks')) {
-          const weeks = parseInt(interval);
-          startDate.setDate(startDate.getDate() + (weeks * 7));
+        try {
+          console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
+
+          const interval = config.mollieInterval || '12 months';
+          let startDate = new Date();
+
+          if (interval.includes('months')) {
+            startDate.setMonth(startDate.getMonth() + parseInt(interval, 10));
+          } else if (interval.includes('days')) {
+            startDate.setDate(startDate.getDate() + parseInt(interval, 10));
+          } else if (interval.includes('weeks')) {
+            startDate.setDate(startDate.getDate() + (parseInt(interval, 10) * 7));
+          }
+
+          const startDateStr = startDate.toISOString().split('T')[0];
+          console.log(`Subscription interval: ${interval}. First payment paid. Next billing date set to: ${startDateStr}`);
+
+          await mollieClient.customerSubscriptions.create({
+            customerId: payment.customerId,
+            amount: {
+              currency: 'EUR',
+              value: yearlyAmount,
+            },
+            interval: interval,
+            startDate: startDateStr,
+            description: `Abonnement verlenging: ${packageId || 'Service'}`,
+            metadata: payment.metadata
+          });
+          console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
+        } catch (err) {
+          // Duplicate subscription on retry is OK — do not fail whole fulfillment
+          const msg = err.message || String(err);
+          if (/already|exists|duplicate/i.test(msg)) {
+            console.warn('Subscription may already exist (retry):', msg);
+          } else {
+            console.error('Failed to create subscription:', msg);
+            criticalFailed = true;
+            criticalError = criticalError || msg;
+          }
         }
-
-        const startDateStr = startDate.toISOString().split('T')[0];
-        console.log(`Subscription interval: ${interval}. First payment paid. Next billing date set to: ${startDateStr}`);
-
-        await mollieClient.customerSubscriptions.create({
-          customerId: payment.customerId,
-          amount: {
-            currency: 'EUR',
-            value: yearlyAmount,
-          },
-          interval: interval,
-          startDate: startDateStr, // Start the automated billing after the initial period
-          description: `Abonnement verlenging: ${packageId || 'Service'}`,
-          metadata: payment.metadata
-        });
-        console.log(`Subscription created successfully for Customer ${payment.customerId}! Next charge: ${startDateStr}`);
       }
 
-      // ─── FIRE CRM WEBHOOK (SUCCESS) ─────────────────────────────────────
+      // ─── FIRE CRM WEBHOOK (SUCCESS / Won) ──────────────────────────────
+      // Skip if a previous (partial) run already sent Won successfully.
       const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
       const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
-      if (crmUrl) {
+      if (await db.hasSuccessfulSend(paymentId, 'crm')) {
+        console.log(`CRM Won already logged as sent/skipped for ${paymentId} — not re-sending.`);
+      } else if (crmUrl) {
         try {
           console.log('Sending lead to CRM webhook:', crmUrl);
           await crm.sendWonLead(crmUrl, payment.metadata, paymentId, { webhookSecret: crmSecret });
@@ -726,6 +760,8 @@ app.post('/api/webhook', async (req, res) => {
           await db.logEmail({ paymentId, type: 'crm',
             recipient: crmUrl, status: 'failed',
             error: err.message, source: 'webhook' });
+          criticalFailed = true;
+          criticalError = criticalError || err.message;
         }
       } else {
         console.warn('crmWebhookUrl not configured — CRM call skipped.');
@@ -737,37 +773,41 @@ app.post('/api/webhook', async (req, res) => {
       let signupUrl = null;
       if (!payment.metadata.invoice_id) {
         try {
-          const signupBuilder = getTenantSignupBuilder(req.tenant);
-          const cfg = await getConfig(req.tenant);
-          const kvSignupUrl = req.tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
-          const base = cfg[kvSignupUrl] || (req.tenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
+          const signupBuilder = getTenantSignupBuilder(tenant);
+          const cfg = await getConfig(tenant);
+          const kvSignupUrl = tenant === 'klantenvertellen' ? 'kvSignupUrl' : 'kiyohSignupUrl';
+          const base = cfg[kvSignupUrl] || (tenant === 'klantenvertellen' ? process.env.KV_SIGNUP_URL : process.env.KIYOH_SIGNUP_URL);
           signupUrl = signupBuilder.buildSignupUrl(payment.metadata, base || undefined);
         } catch (err) {
-          console.error(`Failed to build ${req.tenant} signup URL:`, err.message);
+          console.error(`Failed to build ${tenant} signup URL:`, err.message);
         }
       }
 
       // ─── SEND INTERNAL NOTIFICATION EMAIL ────────────────────────────
-      try {
-        await sendInternalNotification(payment.metadata, req.tenant);
-        await db.logEmail({ paymentId: payment.id, type: 'internal',
-          recipient: (await getConfig(req.tenant)).smtpTo || 'info@klantenvertellen.nl',
-          status: 'sent', source: 'webhook' });
-      } catch (err) {
-        console.error('Failed to send internal notification email:', err.message);
-        await db.logEmail({ paymentId: payment.id, type: 'internal',
-          status: 'failed', error: err.message, source: 'webhook' });
+      if (await db.hasSuccessfulSend(paymentId, 'internal')) {
+        console.log(`Internal mail already sent for ${paymentId} — skip.`);
+      } else {
+        try {
+          await sendInternalNotification(payment.metadata, tenant);
+          await db.logEmail({ paymentId: payment.id, type: 'internal',
+            recipient: (await getConfig(tenant)).smtpTo || 'info@klantenvertellen.nl',
+            status: 'sent', source: 'webhook' });
+        } catch (err) {
+          console.error('Failed to send internal notification email:', err.message);
+          await db.logEmail({ paymentId: payment.id, type: 'internal',
+            status: 'failed', error: err.message, source: 'webhook' });
+          criticalFailed = true;
+          criticalError = criticalError || err.message;
+        }
       }
 
       // ─── SEND CUSTOMER WELCOME / SETUP EMAIL ─────────────────────────
-      // Sales-portal deals are skipped here: the sales rep already has a
-      // direct line to the customer and sets up the account themselves,
-      // so an automatic "create your account" email would be redundant
-      // (and could even confuse a customer who already has an account).
-      // The admin can still send it manually later via Deals & Mails → Resend.
-      if (!payment.metadata.invoice_id && payment.metadata.source !== 'sales-portal') {
+      // Sales-portal deals: skip auto welcome (sales sets up account).
+      if (await db.hasSuccessfulSend(paymentId, 'customer')) {
+        console.log(`Customer mail already sent/skipped for ${paymentId} — skip.`);
+      } else if (!payment.metadata.invoice_id && payment.metadata.source !== 'sales-portal') {
         try {
-          await sendCustomerWelcome(payment.metadata, signupUrl, req.tenant);
+          await sendCustomerWelcome(payment.metadata, signupUrl, tenant);
           await db.logEmail({ paymentId: payment.id, type: 'customer',
             recipient: payment.metadata.customerEmail,
             status: 'sent', source: 'webhook' });
@@ -776,6 +816,8 @@ app.post('/api/webhook', async (req, res) => {
           await db.logEmail({ paymentId: payment.id, type: 'customer',
             recipient: payment.metadata.customerEmail,
             status: 'failed', error: err.message, source: 'webhook' });
+          criticalFailed = true;
+          criticalError = criticalError || err.message;
         }
       } else if (payment.metadata.source === 'sales-portal') {
         await db.logEmail({ paymentId: payment.id, type: 'customer',
@@ -785,11 +827,13 @@ app.post('/api/webhook', async (req, res) => {
       }
 
       // ─── SEND OPDRACHT-FORMULIER TO ACCOUNTANT ───────────────────────
-      if (!payment.metadata.invoice_id) {
+      if (await db.hasSuccessfulSend(paymentId, 'accountant')) {
+        console.log(`Accountant mail already sent/skipped for ${paymentId} — skip.`);
+      } else if (!payment.metadata.invoice_id) {
         try {
-          const mailer = await getSmtpTransporter(req.tenant);
+          const mailer = await getSmtpTransporter(tenant);
           if (mailer) {
-            await opdracht.sendToAccountant(payment.metadata, true, mailer, req.tenant);
+            await opdracht.sendToAccountant(payment.metadata, true, mailer, tenant);
             await db.logEmail({ paymentId: payment.id, type: 'accountant',
               recipient: 'administratie@kv-review.nl',
               status: 'sent', source: 'webhook' });
@@ -803,11 +847,12 @@ app.post('/api/webhook', async (req, res) => {
           await db.logEmail({ paymentId: payment.id, type: 'accountant',
             recipient: 'administratie@kv-review.nl',
             status: 'failed', error: err.message, source: 'webhook' });
+          criticalFailed = true;
+          criticalError = criticalError || err.message;
         }
       }
 
       // ─── FIRE EXACT ONLINE RELATION CREATION (NEW CUSTOMERS) ──────────
-      // If invoice_id is empty, it's a new customer paying via the pricing page
       if (!payment.metadata.invoice_id) {
         console.log('New customer detected. Triggering Exact Online Relation creation...');
         try {
@@ -815,9 +860,20 @@ app.post('/api/webhook', async (req, res) => {
           console.log('Exact Online Relation created successfully!');
         } catch (err) {
           console.error('Failed to create Exact Online Relation:', err.message);
-          // We don't fail the whole webhook if Exact fails, just log it
+          // Exact is best-effort — do not fail webhook / unclaim for this
         }
       }
+    } catch (err) {
+      criticalFailed = true;
+      criticalError = err.message || String(err);
+      console.error('Unexpected error during paid fulfillment:', criticalError);
+    }
+
+    if (criticalFailed) {
+      // Allow Mollie to retry this payment's webhook later
+      await db.unmarkPaymentProcessed(paymentId);
+      console.error(`Fulfillment incomplete for ${paymentId} (${criticalError}). Claim released for retry.`);
+      return res.status(500).send('Fulfillment incomplete — will retry');
     }
 
     res.status(200).send('OK');

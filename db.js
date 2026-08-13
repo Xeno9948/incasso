@@ -121,7 +121,39 @@ async function isPaymentProcessed(paymentId) {
 }
 
 /**
- * Record a payment ID as successfully processed
+ * Atomically claim a payment for processing.
+ * Returns true if THIS caller should run fulfillment (row inserted).
+ * Returns false if another request already claimed/processed it.
+ * Without a DB pool, falls back to the in-memory cache only.
+ */
+async function tryClaimPayment(paymentId) {
+  if (processedCache.has(paymentId)) return false;
+  if (!pool) {
+    if (processedCache.has(paymentId)) return false;
+    processedCache.add(paymentId);
+    return true;
+  }
+
+  try {
+    const res = await pool.query(
+      'INSERT INTO kiyoh_processed_payments (payment_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING payment_id',
+      [paymentId]
+    );
+    if (res.rowCount > 0) {
+      processedCache.add(paymentId);
+      return true;
+    }
+    processedCache.add(paymentId);
+    return false;
+  } catch (err) {
+    console.error('Error claiming payment for processing:', err);
+    // Fail open only if we cannot tell — caller should still be careful
+    return !processedCache.has(paymentId);
+  }
+}
+
+/**
+ * Record a payment ID as successfully processed (legacy / admin use).
  */
 async function markPaymentProcessed(paymentId) {
   processedCache.add(paymentId);
@@ -132,6 +164,23 @@ async function markPaymentProcessed(paymentId) {
     return true;
   } catch (err) {
     console.error('Error marking payment processed:', err);
+    return false;
+  }
+}
+
+/**
+ * Release a claim so Mollie retries (or a later webhook) can re-run
+ * fulfillment after a partial failure (CRM/mail down, etc.).
+ */
+async function unmarkPaymentProcessed(paymentId) {
+  processedCache.delete(paymentId);
+  if (!pool) return true;
+
+  try {
+    await pool.query('DELETE FROM kiyoh_processed_payments WHERE payment_id = $1', [paymentId]);
+    return true;
+  } catch (err) {
+    console.error('Error unmarking payment processed:', err);
     return false;
   }
 }
@@ -174,6 +223,26 @@ async function getEmailLogForPayments(paymentIds) {
   } catch (err) {
     console.error('Error reading email log:', err.message);
     return {};
+  }
+}
+
+/**
+ * True if this payment already has a successful (or intentionally skipped)
+ * log row for the given email_type. Used so webhook retries don't double-send.
+ */
+async function hasSuccessfulSend(paymentId, type) {
+  if (!pool) return false;
+  try {
+    const res = await pool.query(
+      `SELECT 1 FROM kiyoh_email_log
+       WHERE payment_id = $1 AND email_type = $2 AND status IN ('sent', 'skipped')
+       LIMIT 1`,
+      [paymentId, type]
+    );
+    return res.rows.length > 0;
+  } catch (err) {
+    console.error('Error checking successful send:', err.message);
+    return false;
   }
 }
 
@@ -236,8 +305,11 @@ module.exports = {
   saveSettings,
   isPaymentProcessed,
   markPaymentProcessed,
+  tryClaimPayment,
+  unmarkPaymentProcessed,
   logEmail,
   getEmailLogForPayments,
+  hasSuccessfulSend,
   getDealOverrides,
   getDealOverridesBatch,
   saveDealOverrides,
