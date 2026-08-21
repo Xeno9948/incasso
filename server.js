@@ -1001,6 +1001,15 @@ app.post('/api/admin/create-deal', dealAuthMiddleware, async (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const baseUrl = `${protocol}://${req.headers.host}`;
 
+    // Sales-portal links are generated now but often paid days later (sent
+    // via WhatsApp/email, customer decides on their own time) — Mollie's
+    // default expiry per method is as short as ~15 minutes, so give it a
+    // week via dueDate (the general expiry override on the Payments API;
+    // min is tomorrow, max is 100 days out).
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 7);
+    const dueDateStr = dueDate.toISOString().split('T')[0];
+
     const payment = await mollieClient.payments.create({
       amount: { value: amountStr, currency: 'EUR' },
       customerId: mollieCustomer.id,
@@ -1010,6 +1019,7 @@ app.post('/api/admin/create-deal', dealAuthMiddleware, async (req, res) => {
       redirectUrl: `${baseUrl}/success.html`,
       cancelUrl: `${baseUrl}/cancel.html`,
       webhookUrl: `${baseUrl}/api/webhook?tenant=${req.tenant}`,
+      dueDate: dueDateStr,
       billingAddress: {
         streetAndNumber: customer.address || '',
         postalCode: customer.postal || '',
@@ -1051,47 +1061,11 @@ app.post('/api/admin/create-deal', dealAuthMiddleware, async (req, res) => {
       }
     }
 
+    // No CRM push here: unlike the public checkout, the sales rep already
+    // has this lead (they just typed it in) and payment isn't confirmed
+    // yet — the CRM "Won" lead fires from /api/webhook once Mollie
+    // confirms payment.status === 'paid', same as every other deal.
     res.json({ checkoutUrl, paymentId: payment.id, emailSent, emailError });
-
-    // Fire CRM "Opvolgen" lead the same way the public checkout does,
-    // so this deal shows up in the CRM even if the customer never pays.
-    try {
-      const crmUrl = config.crmWebhookUrl || process.env.CRM_WEBHOOK_URL;
-      const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
-      if (crmUrl) {
-        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Kiyoh-Webhook-Client/1.0' };
-        if (crmSecret) headers['X-Webhook-Secret'] = crmSecret;
-        fetch(crmUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            aanmelding_type: `${getTenantName(req.tenant)} Sales Portal Deal`,
-            bedrijf: customer.bName,
-            contactpersoon: customer.pName,
-            website: customer.website || '',
-            telefoon: customer.phone || '',
-            email: customer.email,
-            collega: 'Systeem',
-            status: 'Opvolgen',
-            upsell: 'NB',
-            product: getTenantName(req.tenant),
-            message: `Handmatige deal via sales portal.\nPakket: ${pkgName}\nModules: ${modulesStr || 'Geen'}`,
-            feature: pkgName,
-            deal_waarde: amountStr,
-            kvk: customer.kvk || '',
-            adres: customer.address || '',
-            postcode: customer.postal || '',
-            plaats: customer.city || '',
-            land: customer.country || 'NL',
-            source: 'sales-portal',
-            external_id: payment.id,
-            utm: {}
-          })
-        }).catch(e => console.error('Error sending sales-portal CRM webhook:', e));
-      }
-    } catch (err) {
-      console.error('Failed to send sales-portal CRM webhook:', err);
-    }
   } catch (error) {
     console.error('Failed to create sales-portal deal:', error);
     res.status(500).json({ error: 'Mollie API Error', details: error.message });
