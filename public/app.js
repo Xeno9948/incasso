@@ -69,8 +69,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     onlineModules.forEach(mod => {
       // Dynamic price for Productreviews: 60% of package price
+      const isProductreviews = mod.name === 'Productreviews' || mod.id === 'productreviews';
       let displayPrice = mod.price;
-      if (mod.name === 'Productreviews' || mod.id === 'productreviews') {
+      if (isProductreviews) {
         displayPrice = packagePrice * 0.6;
       }
       
@@ -95,8 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           <p>${mod.description}</p>
         </div>
         <div class="pm-price-wrap">
-          <span class="pm-price">€${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
-          <div class="pm-yearly">Jaarlijks: €${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
+          <span class="pm-price">${isProductreviews ? '<span class="pm-vanaf">vanaf </span>' : ''}€${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
+          <div class="pm-yearly">${isProductreviews ? 'Jaarlijks vanaf' : 'Jaarlijks'}: €${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
           <div class="pm-select-btn">Voeg toe</div>
         </div>`;
       modulesGrid.appendChild(card);
@@ -239,6 +240,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     summaryModulesList.innerHTML = '';
     let yearlyTotal = yearlyPackage;
+
+    const hasProductreviews = state.modules.some(m => m.name === 'Productreviews');
+    const disclaimer = document.getElementById('summary-productreviews-disclaimer');
+    if (disclaimer) disclaimer.hidden = !hasProductreviews;
 
     if (state.modules.length === 0) {
       summaryModulesList.innerHTML = '<div style="font-style:italic;color:#aaa;font-size:0.85rem;margin-bottom:8px;">Geen extra modules geselecteerd.</div>';

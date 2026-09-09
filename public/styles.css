@@ -168,6 +168,8 @@ p { font-size: 0.9rem; color: var(--text-light); }
 .pm-price-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .pm-price { font-size: 1rem; font-weight: 700; }
 .pm-price span { font-size: 0.75rem; font-weight: 400; color: #999; }
+.pm-price .pm-vanaf { font-size: 0.75rem; font-weight: 500; color: #666; }
+.summary-disclaimer { font-size: 0.8rem; color: #888; line-height: 1.4; margin: 4px 0 10px; }
 .pm-yearly { font-size: 0.7rem; color: #bbb; }
 
 .pm-select-btn {
