@@ -7,6 +7,7 @@ const kiyoh = require('./kiyoh');
 const klantenvertellen = require('./klantenvertellen');
 const opdracht = require('./opdracht');
 const crm = require('./crm');
+const ads = require('./ads-attribution');
 const { rateLimit } = require('express-rate-limit');
 const { TOTP, NobleCryptoPlugin, ScureBase32Plugin } = require('otplib');
 const nodemailer = require('nodemailer');
@@ -481,17 +482,17 @@ app.post('/api/upload', authMiddleware, async (req, res) => {
 // Setup Checkout API Route
 app.post('/api/checkout', async (req, res) => {
   try {
-    const { package, modules, customer, utms } = req.body;
+    const { package, modules, customer, utms, language } = req.body;
 
     // Get client IP for UTMs if possible
     const user_ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     if (utms) utms.user_ip = user_ip;
 
-    // Create a copy of utms for Mollie metadata and truncate user_agent to stay safely under Mollie's 1kB limit
-    const mollieUtms = utms ? { ...utms } : {};
-    if (mollieUtms.user_agent) {
-      mollieUtms.user_agent = mollieUtms.user_agent.substring(0, 70);
-    }
+    const clickId = ads.pickGoogleClickId(utms);
+    const packageSlug = ads.normalizePackageSlug(package);
+    const checkoutLanguage = ads.normalizeLanguage(language || (utms && (utms.lang || utms.language)));
+    // Compact copy for Mollie metadata (1kB limit) — keep exactly one click id
+    const mollieUtms = ads.compactUtmsForMollie(utms, clickId);
 
     // Load config for dynamic settings
     const config = await getConfig(req.tenant);
@@ -541,6 +542,12 @@ app.post('/api/checkout', async (req, res) => {
     const isRecurring = config.molliePaymentType !== 'once';
     const sequenceType = isRecurring ? 'first' : 'oneoff';
 
+    const yearlyAmountExVat = ads.conversionValueExVat(yearlyTotalExcl).toFixed(2);
+    const attributionMeta = {};
+    if (clickId.gclid) attributionMeta.gclid = clickId.gclid;
+    if (clickId.wbraid) attributionMeta.wbraid = clickId.wbraid;
+    if (clickId.gbraid) attributionMeta.gbraid = clickId.gbraid;
+
     const payment = await mollieClient.payments.create({
       amount: {
         value: amountStr,
@@ -562,7 +569,10 @@ app.post('/api/checkout', async (req, res) => {
       metadata: {
         tenant: req.tenant,
         packageId: package.name,
+        packageSlug: packageSlug || undefined,
+        language: checkoutLanguage,
         yearlyAmount: amountStr,
+        yearlyAmountExVat,
         description: descriptionStr,
         customerName: customer.pName,
         businessName: customer.bName,
@@ -576,9 +586,24 @@ app.post('/api/checkout', async (req, res) => {
         kvkNumber: customer.kvk,
         btwNumber: customer.btw || '',
         modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
-        utms: mollieUtms
+        utms: mollieUtms,
+        ...attributionMeta
       }
     });
+
+    // Point Mollie back at success.html with the payment id so we can
+    // confirm paid status before notifying the kiyoh.com parent.
+    try {
+      const successQs = new URLSearchParams({ orderId: payment.id, tenant: req.tenant });
+      await mollieClient.payments.update(payment.id, {
+        redirectUrl: `${baseUrl}/success.html?${successQs}`
+      });
+    } catch (err) {
+      console.error('Failed to attach orderId to success redirectUrl:', err.message);
+    }
+
+    const clickKind = clickId.gclid ? 'gclid' : clickId.wbraid ? 'wbraid' : clickId.gbraid ? 'gbraid' : null;
+    if (clickKind) console.log(`Checkout attribution: ${clickKind} persisted on ${payment.id}`);
 
     // Send the payment link back to the frontend
     res.json({ checkoutUrl: payment.getCheckoutUrl() });
@@ -592,12 +617,6 @@ app.post('/api/checkout', async (req, res) => {
       const crmSecret = config.crmWebhookSecret || process.env.CRM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
       if (crmUrl) {
         console.log('Sending abandoned cart lead to CRM webhook:', crmUrl);
-        // Fire in background, don't await
-        
-        // Build an explicit message with selected package & modules
-        const selectedModules = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen extra modules';
-        const explicitMessage = `Pakket geselecteerd: ${package.name}\nModules geselecteerd: ${selectedModules}\nAdres: ${customer.address}\nPostcode: ${customer.postal}\nPlaats: ${customer.city}\nLand: ${customer.country}\nKVK: ${customer.kvk}`;
-
         const headers = {
           'Content-Type': 'application/json',
           'User-Agent': 'Kiyoh-Webhook-Client/1.0'
@@ -607,29 +626,7 @@ app.post('/api/checkout', async (req, res) => {
         fetch(crmUrl, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            aanmelding_type: "Kiyoh Online Abonnement",
-            bedrijf: customer.bName,
-            contactpersoon: customer.pName,
-            website: customer.website || '',
-            telefoon: customer.phone || '',
-            email: customer.email,
-            collega: "Systeem",
-            status: "Opvolgen",
-            upsell: "NB",
-            product: "Kiyoh",
-            message: explicitMessage,
-            feature: package.name,
-            deal_waarde: amountStr,
-            kvk: customer.kvk,
-            adres: customer.address,
-            postcode: customer.postal,
-            plaats: customer.city,
-            land: customer.country,
-            source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
-            external_id: payment.id,
-            utm: utms || {}
-          })
+          body: JSON.stringify(crm.buildPayload(payment.metadata, payment.id, { status: 'Opvolgen' }))
         }).catch(e => console.error('Error sending abandoned cart webhook:', e));
       }
     } catch (err) {
@@ -640,6 +637,71 @@ app.post('/api/checkout', async (req, res) => {
     console.error('Failed to create Mollie payment:', error);
     res.status(500).json({ error: 'Mollie API Error', details: error.message });
   }
+});
+
+const checkoutCompleteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Too many requests' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Success page calls this after Mollie redirects. Confirms the payment is
+ * paid, then returns the Path 1 postMessage payload (no PII). GTM on
+ * kiyoh.com fires from that message — we never load gtag here.
+ */
+app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
+  const orderId = String(req.query.orderId || '').trim();
+  if (!/^tr_[A-Za-z0-9]+$/.test(orderId)) {
+    return res.status(400).json({ error: 'Invalid orderId' });
+  }
+
+  const preferredTenant = String(req.query.tenant || req.tenant || 'kiyoh').toLowerCase();
+  const tenants = preferredTenant === 'klantenvertellen'
+    ? ['klantenvertellen', 'kiyoh']
+    : ['kiyoh', 'klantenvertellen'];
+
+  let payment = null;
+  let tenant = preferredTenant;
+  for (const t of tenants) {
+    try {
+      const mollieClient = await getMollieClient(t);
+      payment = await mollieClient.payments.get(orderId);
+      tenant = t;
+      break;
+    } catch (err) {
+      // Wrong Mollie account or unknown id — try the other tenant.
+    }
+  }
+
+  if (!payment) {
+    return res.status(404).json({ error: 'Payment not found' });
+  }
+
+  if (payment.status !== 'paid') {
+    return res.status(409).json({ error: 'Payment not paid', status: payment.status });
+  }
+
+  const metadata = payment.metadata || {};
+  if (!ads.shouldNotifyKiyohAds(metadata, metadata.tenant || tenant)) {
+    return res.json({ notify: false, orderId: payment.id });
+  }
+
+  const packageSlug = ads.normalizePackageSlug(metadata.packageSlug || metadata.packageId);
+  const message = ads.buildConversionMessage({
+    packageSlug,
+    language: metadata.language,
+    value: metadata.yearlyAmountExVat,
+    orderId: payment.id
+  });
+
+  if (!message.package || !message.value) {
+    return res.json({ notify: false, orderId: payment.id });
+  }
+
+  res.json({ notify: true, ...message });
 });
 
 // Setup Webhook to handle successful payments and create subscriptions.

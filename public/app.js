@@ -9,12 +9,118 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Could not load config:', e);
   }
 
+  // ─── ATTRIBUTION (gclid / gbraid / wbraid / language) ────
+  // Capture on load so a later in-iframe navigation cannot drop the click id.
+  // Google accepts at most one of gclid | wbraid | gbraid.
+  const KIYOH_PARENT_ORIGINS = ['https://kiyoh.com', 'https://www.kiyoh.com'];
+  const CLICK_ID_PRIORITY = ['gclid', 'wbraid', 'gbraid'];
+
+  function getParam(key) {
+    const urlParams = new URLSearchParams(window.location.search);
+    let val = urlParams.get(key);
+    if (val) return val;
+
+    try {
+      if (document.referrer) {
+        const refUrl = new URL(document.referrer);
+        val = refUrl.searchParams.get(key);
+        if (val) return val;
+      }
+    } catch (e) {}
+
+    try {
+      val = sessionStorage.getItem('kiyoh_' + key);
+      if (val) return val;
+    } catch (e) {}
+
+    return '';
+  }
+
+  function persistSession(key, val) {
+    if (!val) return;
+    try { sessionStorage.setItem('kiyoh_' + key, val); } catch (e) {}
+  }
+
+  (function captureAttributionOnLoad() {
+    ['utm_source', 'gclid', 'gbraid', 'wbraid', 'fbclid', 'li_fat_id', 'ga4id', 'lang', 'language'].forEach(key => {
+      const fromUrl = new URLSearchParams(window.location.search).get(key);
+      if (fromUrl) persistSession(key, fromUrl);
+    });
+    try {
+      if (document.referrer) {
+        const refUrl = new URL(document.referrer);
+        CLICK_ID_PRIORITY.concat(['utm_source', 'lang', 'language']).forEach(key => {
+          const val = refUrl.searchParams.get(key);
+          if (val && !sessionStorage.getItem('kiyoh_' + key)) persistSession(key, val);
+        });
+      }
+    } catch (e) {}
+    // If this page load carries a click id, drop the other two so a stale
+    // session gclid cannot override a current gbraid/wbraid.
+    const live = new URLSearchParams(window.location.search);
+    const liveClick = CLICK_ID_PRIORITY.find(key => live.get(key));
+    if (liveClick) {
+      CLICK_ID_PRIORITY.forEach(key => {
+        if (key !== liveClick) {
+          try { sessionStorage.removeItem('kiyoh_' + key); } catch (e) {}
+        }
+      });
+    }
+  })();
+
+  function collectClickId() {
+    const found = { gclid: '', gbraid: '', wbraid: '' };
+    const urlParams = new URLSearchParams(window.location.search);
+    let referrerParams = null;
+    try {
+      if (document.referrer) referrerParams = new URL(document.referrer).searchParams;
+    } catch (e) {}
+
+    function fromLive(key) {
+      return urlParams.get(key) || (referrerParams && referrerParams.get(key)) || '';
+    }
+
+    for (const key of CLICK_ID_PRIORITY) {
+      const val = fromLive(key);
+      if (val) {
+        found[key] = val;
+        persistSession(key, val);
+        return found;
+      }
+    }
+    for (const key of CLICK_ID_PRIORITY) {
+      let val = '';
+      try { val = sessionStorage.getItem('kiyoh_' + key) || ''; } catch (e) {}
+      if (val) {
+        found[key] = val;
+        return found;
+      }
+    }
+    return found;
+  }
+
+  function collectLanguage() {
+    const raw = (getParam('lang') || getParam('language') || document.documentElement.lang || 'nl').toLowerCase().slice(0, 2);
+    const language = raw === 'en' ? 'en' : 'nl';
+    persistSession('lang', language);
+    return language;
+  }
+
+  function postToKiyohParent(payload) {
+    if (window.self === window.top) return;
+    KIYOH_PARENT_ORIGINS.forEach(origin => {
+      window.parent.postMessage(payload, origin);
+    });
+  }
+
   // ─── STATE ───────────────────────────────────────────────
   const onlinePackages = config.packages.filter(p => !p.offline);
   const onlineModules = config.modules.filter(m => !m.offline);
 
   let state = {
-    package: onlinePackages[0] ? { name: onlinePackages[0].name, price: onlinePackages[0].price } : { name: '', price: 0 },
+    package: onlinePackages[0]
+      ? { id: onlinePackages[0].id || '', name: onlinePackages[0].name, price: onlinePackages[0].price }
+      : { id: '', name: '', price: 0 },
     modules: []
   };
 
@@ -181,6 +287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.textContent = 'Geselecteerd ✓';
 
     state.package = {
+      id:    card.getAttribute('data-package') || '',
       name:  card.querySelector('h3').textContent.trim(),
       price: parseFloat(card.getAttribute('data-price'))
     };
@@ -294,43 +401,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkoutBtn.textContent = 'Bezig…';
     checkoutBtn.disabled = true;
 
-    // Collect UTM Parameters (from URL query, referrer, or session storage)
-    const getParam = (key) => {
-      const urlParams = new URLSearchParams(window.location.search);
-      let val = urlParams.get(key);
-      if (val) return val;
+    // Open Mollie in a popup while we still have the user gesture so the
+    // kiyoh.com parent (and its gclid cookie) stay in place for Path 1.
+    const inIframe = window.self !== window.top;
+    let payWindow = null;
+    if (inIframe) {
+      payWindow = window.open('', 'kiyoh_mollie_checkout');
+      if (payWindow) {
+        try {
+          payWindow.document.write('<p style="font-family:sans-serif;padding:2rem;">Bezig met omleiden naar de betaling…</p>');
+        } catch (e) {}
+      }
+    }
 
-      // Try referrer fallback (for iframe embeds)
-      try {
-        if (document.referrer) {
-          const refUrl = new URL(document.referrer);
-          val = refUrl.searchParams.get(key);
-          if (val) return val;
-        }
-      } catch (e) {}
-
-      // Try sessionStorage fallback
-      try {
-        val = sessionStorage.getItem('kiyoh_' + key);
-        if (val) return val;
-      } catch (e) {}
-
-      return '';
-    };
-
-    // Store in sessionStorage and construct UTMs object
-    const utmKeys = ['utm_source', 'gclid', 'gbraid', 'fbclid', 'li_fat_id', 'ga4id'];
-    const utms = { user_agent: navigator.userAgent || '' };
-    
+    const clickId = collectClickId();
+    const language = collectLanguage();
+    const utmKeys = ['utm_source', 'fbclid', 'li_fat_id', 'ga4id'];
+    const utms = { user_agent: navigator.userAgent || '', lang: language };
     utmKeys.forEach(key => {
       const val = getParam(key);
       utms[key] = val;
-      if (val) {
-        try {
-          sessionStorage.setItem('kiyoh_' + key, val);
-        } catch (e) {}
-      }
+      if (val) persistSession(key, val);
     });
+    if (clickId.gclid) utms.gclid = clickId.gclid;
+    else if (clickId.wbraid) utms.wbraid = clickId.wbraid;
+    else if (clickId.gbraid) utms.gbraid = clickId.gbraid;
 
     try {
       // Get tenant from URL query param (e.g., ?tenant=klantenvertellen)
@@ -340,26 +435,42 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone }, utms, tenant })
+        body: JSON.stringify({
+          ...state,
+          customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone },
+          utms,
+          language,
+          tenant
+        })
       });
 
       if (!res.ok) throw new Error('Server error');
       const data = await res.json();
 
       if (data.checkoutUrl) {
-        // If in iframe, request parent to handle checkout redirect
-        if (window.self !== window.top) {
-          window.parent.postMessage({ type: 'kiyoh-checkout', checkoutUrl: data.checkoutUrl }, '*');
+        if (inIframe) {
+          const popupBlocked = !(payWindow && !payWindow.closed);
+          const checkoutMsg = { type: 'kiyoh-checkout', checkoutUrl: data.checkoutUrl, popupBlocked };
+          if (tenant === 'klantenvertellen') {
+            window.parent.postMessage(checkoutMsg, '*');
+          } else {
+            postToKiyohParent(checkoutMsg);
+          }
+          if (!popupBlocked) {
+            payWindow.location = data.checkoutUrl;
+          }
           checkoutBtn.textContent = 'Bezig met omleiden…';
         } else {
           window.location.href = data.checkoutUrl;
         }
       } else {
+        if (payWindow && !payWindow.closed) payWindow.close();
         alert('Er ging iets mis bij het genereren van de betaallink.');
         checkoutBtn.textContent = 'Start Abonnement 🔒';
         checkoutBtn.disabled = false;
       }
     } catch (err) {
+      if (payWindow && !payWindow.closed) payWindow.close();
       console.error('Checkout error:', err);
       alert('Kan geen verbinding maken met de server.');
       checkoutBtn.textContent = 'Start Abonnement 🔒';

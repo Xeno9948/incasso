@@ -1107,38 +1107,82 @@ function renderAll() {
 '</style>' + '\n' +
 '<' + 'script>' + '\n' +
 '  (function() {' + '\n' +
+'    var CHECKOUT_ORIGIN = \'' + currentOrigin + '\';' + '\n' +
 '    var lastH = 0;' + '\n' +
 '    var iframe = document.getElementById(\'' + iframeId + '\');' + '\n' +
+'    window.dataLayer = window.dataLayer || [];' + '\n' +
+'\n' +
+'    function qp(name) {' + '\n' +
+'      try { return new URLSearchParams(window.location.search).get(name) || \'\'; } catch (e) { return \'\'; }' + '\n' +
+'    }' + '\n' +
+'    function cookie(name) {' + '\n' +
+'      var parts = (\'; \' + document.cookie).split(\'; \' + name + \'=\');' + '\n' +
+'      if (parts.length < 2) return \'\';' + '\n' +
+'      return decodeURIComponent(parts.pop().split(\';\').shift());' + '\n' +
+'    }' + '\n' +
+'    function gclidFromLinker() {' + '\n' +
+'      var raw = cookie(\'_gcl_aw\') || cookie(\'_gcl_gb\');' + '\n' +
+'      if (!raw) return \'\';' + '\n' +
+'      var parts = raw.split(\'.\');' + '\n' +
+'      return parts.length >= 3 ? parts.slice(2).join(\'.\') : \'\';' + '\n' +
+'    }' + '\n' +
+'    function pickClickId() {' + '\n' +
+'      var gclid = qp(\'gclid\') || gclidFromLinker();' + '\n' +
+'      var wbraid = qp(\'wbraid\');' + '\n' +
+'      var gbraid = qp(\'gbraid\');' + '\n' +
+'      if (gclid) return { gclid: gclid };' + '\n' +
+'      if (wbraid) return { wbraid: wbraid };' + '\n' +
+'      if (gbraid) return { gbraid: gbraid };' + '\n' +
+'      return {};' + '\n' +
+'    }' + '\n' +
 '\n' +
 '    window.addEventListener(\'message\', function(e) {' + '\n' +
-'      if (!iframe) return;' + '\n' +
-'      if (e.data && e.data.type === \'kiyoh-resize\') {' + '\n' +
+'      if (e.origin !== CHECKOUT_ORIGIN) return;' + '\n' +
+'      if (!e.data || typeof e.data !== \'object\') return;' + '\n' +
+'      if (e.data.type === \'kiyoh-resize\' && iframe) {' + '\n' +
 '        var newH = e.data.height;' + '\n' +
 '        if (lastH !== newH) {' + '\n' +
 '          lastH = newH;' + '\n' +
 '          iframe.style.height = newH + \'px\';' + '\n' +
 '        }' + '\n' +
 '      }' + '\n' +
-'      if (e.data && e.data.type === \'kiyoh-checkout\' && e.data.checkoutUrl) {' + '\n' +
+'      if (e.data.type === \'kiyoh-checkout\' && e.data.checkoutUrl && e.data.popupBlocked) {' + '\n' +
 '        window.location.href = e.data.checkoutUrl;' + '\n' +
 '      }' + '\n' +
-'      if (e.data && e.data.type === \'kiyoh-maximize\') {' + '\n' +
+'      if (e.data.type === \'kiyoh-maximize\' && iframe) {' + '\n' +
 '        iframe.classList.add(\'kiyoh-fullscreen\');' + '\n' +
 '        document.body.style.overflow = \'hidden\';' + '\n' +
 '      }' + '\n' +
-'      if (e.data && e.data.type === \'kiyoh-minimize\') {' + '\n' +
+'      if (e.data.type === \'kiyoh-minimize\' && iframe) {' + '\n' +
 '        iframe.classList.remove(\'kiyoh-fullscreen\');' + '\n' +
 '        document.body.style.overflow = \'\';' + '\n' +
+'      }' + '\n' +
+'      if (e.data.type === \'kiyoh_checkout_complete\') {' + '\n' +
+'        window.dataLayer.push({' + '\n' +
+'          event: \'kiyoh_checkout_complete\',' + '\n' +
+'          package: e.data.package,' + '\n' +
+'          language: e.data.language,' + '\n' +
+'          value: e.data.value,' + '\n' +
+'          currency: e.data.currency || \'EUR\',' + '\n' +
+'          transaction_id: e.data.orderId,' + '\n' +
+'          orderId: e.data.orderId' + '\n' +
+'        });' + '\n' +
 '      }' + '\n' +
 '    }, false);' + '\n' +
 '\n' +
 '    function loadIframe() {' + '\n' +
-'      if (iframe && iframe.src === \'about:blank\') {' + '\n' +
-'        iframe.src = \'' + currentOrigin + '/\';' + '\n' +
-'        iframe.onload = function() {' + '\n' +
-'           iframe.contentWindow.postMessage({ type: \'kiyoh-parent-ready\' }, \'*\');' + '\n' +
-'        };' + '\n' +
-'      }' + '\n' +
+'      if (!iframe || iframe.src !== \'about:blank\') return;' + '\n' +
+'      var lang = (qp(\'lang\') || qp(\'language\') || document.documentElement.lang || \'nl\').toLowerCase().slice(0, 2);' + '\n' +
+'      if (lang !== \'en\') lang = \'nl\';' + '\n' +
+'      var src = CHECKOUT_ORIGIN + \'/?lang=\' + encodeURIComponent(lang);' + '\n' +
+'      var click = pickClickId();' + '\n' +
+'      if (click.gclid) src += \'&gclid=\' + encodeURIComponent(click.gclid);' + '\n' +
+'      else if (click.wbraid) src += \'&wbraid=\' + encodeURIComponent(click.wbraid);' + '\n' +
+'      else if (click.gbraid) src += \'&gbraid=\' + encodeURIComponent(click.gbraid);' + '\n' +
+'      iframe.src = src;' + '\n' +
+'      iframe.onload = function() {' + '\n' +
+'        iframe.contentWindow.postMessage({ type: \'kiyoh-parent-ready\' }, CHECKOUT_ORIGIN);' + '\n' +
+'      };' + '\n' +
 '    }' + '\n' +
 '    loadIframe();' + '\n' +
 '  })();' + '\n' +

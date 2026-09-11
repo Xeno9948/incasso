@@ -5,10 +5,11 @@
  */
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+const { pickGoogleClickId } = require('./ads-attribution');
 
-function buildPayload(metadata, paymentId) {
+function buildPayload(metadata, paymentId, opts = {}) {
   const {
-    yearlyAmount, packageId, modulesList, utms,
+    yearlyAmount, yearlyAmountExVat, packageId, modulesList, utms,
     customerName, businessName, website, customerEmail, customerPhone,
     businessAddress, businessPostal, businessCity, businessCountry, kvkNumber
   } = metadata;
@@ -21,7 +22,17 @@ Plaats: ${businessCity || ''}
 Land: ${businessCountry || ''}
 KVK: ${kvkNumber || ''}`;
 
-  return {
+  const click = pickGoogleClickId(metadata);
+  const utm = { ...(utms || {}) };
+  // Keep CRM mappings stable: exactly one of gclid / wbraid / gbraid.
+  delete utm.gclid;
+  delete utm.gbraid;
+  delete utm.wbraid;
+  if (click.gclid) utm.gclid = click.gclid;
+  else if (click.wbraid) utm.wbraid = click.wbraid;
+  else if (click.gbraid) utm.gbraid = click.gbraid;
+
+  const payload = {
     aanmelding_type: 'Kiyoh Online Abonnement',
     bedrijf: businessName || customerName,
     contactpersoon: customerName,
@@ -29,12 +40,13 @@ KVK: ${kvkNumber || ''}`;
     telefoon: customerPhone || '',
     email: customerEmail,
     collega: 'Systeem',
-    status: 'Won',
+    status: opts.status || 'Won',
     upsell: 'NB',
     product: 'Kiyoh',
     message: explicitMessage,
     feature: packageId,
     deal_waarde: yearlyAmount,
+    deal_waarde_ex_btw: yearlyAmountExVat || '',
     kvk: kvkNumber || '',
     adres: businessAddress || '',
     postcode: businessPostal || '',
@@ -42,8 +54,16 @@ KVK: ${kvkNumber || ''}`;
     land: businessCountry || '',
     source: utms ? (utms.utm_source || utms.source || 'website') : 'website',
     external_id: paymentId,
-    utm: utms || {}
+    utm
   };
+
+  // Top-level click ids so the CRM offline conversion import does not
+  // have to dig through utm. Only the matching key is populated.
+  if (click.gclid) payload.gclid = click.gclid;
+  if (click.wbraid) payload.wbraid = click.wbraid;
+  if (click.gbraid) payload.gbraid = click.gbraid;
+
+  return payload;
 }
 
 /**
@@ -62,7 +82,7 @@ async function sendWonLead(crmUrl, metadata, paymentId, opts = {}) {
   const resp = await fetch(crmUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify(buildPayload(metadata, paymentId))
+    body: JSON.stringify(buildPayload(metadata, paymentId, { status: 'Won' }))
   });
 
   if (!resp.ok) {

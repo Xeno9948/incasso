@@ -21,5 +21,59 @@
     <p class="mb-4">Je betaling is succesvol afgerond. We gaan direct voor je aan de slag. Je ontvangt zometeen een bevestiging per e-mail met meer informatie over het opzetten van je account.</p>
     <a href="https://kiyoh.com/tarieven" class="btn btn-primary mt-4">Terug naar Home</a>
   </div>
+  <script>
+    (function () {
+      var PARENT_ORIGINS = ['https://kiyoh.com', 'https://www.kiyoh.com'];
+      var params = new URLSearchParams(window.location.search);
+      var orderId = params.get('orderId') || '';
+      var tenant = params.get('tenant') || 'kiyoh';
+      if (!orderId) return;
+
+      var dedupeKey = 'kiyoh_ads_notified_' + orderId;
+      try {
+        if (sessionStorage.getItem(dedupeKey)) return;
+      } catch (e) {}
+
+      function postConversion(payload) {
+        PARENT_ORIGINS.forEach(function (origin) {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(payload, origin);
+          }
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(payload, origin);
+          }
+        });
+      }
+
+      function notify(attempt) {
+        var url = '/api/checkout-complete?orderId=' + encodeURIComponent(orderId) +
+          '&tenant=' + encodeURIComponent(tenant);
+        fetch(url).then(function (res) {
+          if (res.status === 409 && attempt < 8) {
+            setTimeout(function () { notify(attempt + 1); }, 750);
+            return null;
+          }
+          if (!res.ok) return null;
+          return res.json();
+        }).then(function (data) {
+          if (!data || !data.notify) return;
+          var payload = {
+            type: 'kiyoh_checkout_complete',
+            package: data.package,
+            language: data.language,
+            value: data.value,
+            currency: data.currency || 'EUR',
+            orderId: data.orderId
+          };
+          postConversion(payload);
+          try { sessionStorage.setItem(dedupeKey, '1'); } catch (e) {}
+        }).catch(function () {
+          if (attempt < 8) setTimeout(function () { notify(attempt + 1); }, 750);
+        });
+      }
+
+      notify(0);
+    })();
+  </script>
 </body>
 </html>
