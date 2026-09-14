@@ -113,6 +113,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Relay Path 1 from the Mollie success popup. success.html posts to
+  // window.opener (this iframe) with targetOrigin === payment.kiyoh.com;
+  // we forward the same payload to kiyoh.com so GTM can fire.
+  window.addEventListener('message', function (e) {
+    if (e.origin !== window.location.origin) return;
+    if (!e.data || e.data.type !== 'kiyoh_checkout_complete') return;
+    postToKiyohParent(e.data);
+  });
+
   // ─── STATE ───────────────────────────────────────────────
   const onlinePackages = config.packages.filter(p => !p.offline);
   const onlineModules = config.modules.filter(m => !m.offline);

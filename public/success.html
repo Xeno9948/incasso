@@ -35,14 +35,21 @@
       } catch (e) {}
 
       function postConversion(payload) {
+        // When success loads inside the embed iframe, post straight to kiyoh.com.
         PARENT_ORIGINS.forEach(function (origin) {
           if (window.parent && window.parent !== window) {
             window.parent.postMessage(payload, origin);
           }
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(payload, origin);
-          }
         });
+        // Mollie opens in a popup whose opener is the payment iframe (same
+        // origin). Target the opener with this origin so the iframe can relay
+        // to kiyoh.com — posting with PARENT_ORIGINS here is dropped by the
+        // browser because opener is payment.kiyoh.com, not www.kiyoh.com.
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage(payload, window.location.origin);
+          } catch (e) {}
+        }
       }
 
       function notify(attempt) {
