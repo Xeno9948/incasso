@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Betaling Geslaagd | Kiyoh</title>
   <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -23,19 +24,39 @@
   </div>
   <script>
     (function () {
-      var PARENT_ORIGINS = ['https://kiyoh.com', 'https://www.kiyoh.com'];
+      // Parents that embed this portal. The browser delivers the message
+      // only to the one that actually framed us. Never '*'.
+      var PARENT_ORIGINS = [
+        'https://kiyoh.com',
+        'https://www.kiyoh.com',
+        'https://kiyoh-com-production.up.railway.app'
+      ];
+      // open/pending/authorized can still flip to paid. failed/canceled/expired must not.
+      var RETRYABLE = { open: 1, pending: 1, authorized: 1 };
+      var CHANNEL = 'kiyoh_checkout_complete';
       var params = new URLSearchParams(window.location.search);
       var orderId = params.get('orderId') || '';
       var tenant = params.get('tenant') || 'kiyoh';
       if (!orderId) return;
 
       var dedupeKey = 'kiyoh_ads_notified_' + orderId;
-      try {
-        if (sessionStorage.getItem(dedupeKey)) return;
-      } catch (e) {}
+      function alreadySent() {
+        try {
+          if (sessionStorage.getItem(dedupeKey) === '1') return true;
+          if (localStorage.getItem(dedupeKey) === '1') return true;
+        } catch (e) {}
+        return false;
+      }
+      function markSent() {
+        try { sessionStorage.setItem(dedupeKey, '1'); } catch (e) {}
+        try { localStorage.setItem(dedupeKey, '1'); } catch (e) {}
+      }
+      if (alreadySent()) return;
+
+      var sent = false;
 
       function postConversion(payload) {
-        // When success loads inside the embed iframe, post straight to kiyoh.com.
+        // When success loads inside the embed iframe, post straight to the parent.
         PARENT_ORIGINS.forEach(function (origin) {
           if (window.parent && window.parent !== window) {
             window.parent.postMessage(payload, origin);
@@ -50,20 +71,40 @@
             window.opener.postMessage(payload, window.location.origin);
           } catch (e) {}
         }
+        // Mollie may sever window.opener (COOP). The pricing iframe is still
+        // same-origin and listening, so this reaches it without a wildcard origin.
+        try {
+          var bc = new BroadcastChannel(CHANNEL);
+          bc.postMessage(payload);
+          bc.close();
+        } catch (e) {}
       }
 
       function notify(attempt) {
+        if (sent || alreadySent()) return;
         var url = '/api/checkout-complete?orderId=' + encodeURIComponent(orderId) +
           '&tenant=' + encodeURIComponent(tenant);
-        fetch(url).then(function (res) {
-          if (res.status === 409 && attempt < 8) {
-            setTimeout(function () { notify(attempt + 1); }, 750);
-            return null;
+        fetch(url, { cache: 'no-store' }).then(function (res) {
+          if (res.status === 409) {
+            return res.json().then(function (body) {
+              var status = body && body.status;
+              if (RETRYABLE[status] && attempt < 8) {
+                setTimeout(function () { notify(attempt + 1); }, 750);
+              }
+              return null;
+            }).catch(function () { return null; });
           }
           if (!res.ok) return null;
           return res.json();
         }).then(function (data) {
-          if (!data || !data.notify) return;
+          if (sent || alreadySent()) return;
+          if (!data) return;
+          // Paid, but not a storefront package checkout (sales link, invoice).
+          if (!data.notify) {
+            markSent();
+            return;
+          }
+          // value is the ex-VAT yearly total from the API, already a number.
           var payload = {
             type: 'kiyoh_checkout_complete',
             package: data.package,
@@ -72,10 +113,12 @@
             currency: data.currency || 'EUR',
             orderId: data.orderId
           };
+          if (data.email) payload.email = data.email;
+          sent = true;
+          markSent();
           postConversion(payload);
-          try { sessionStorage.setItem(dedupeKey, '1'); } catch (e) {}
         }).catch(function () {
-          if (attempt < 8) setTimeout(function () { notify(attempt + 1); }, 750);
+          if (!sent && attempt < 8) setTimeout(function () { notify(attempt + 1); }, 750);
         });
       }
 

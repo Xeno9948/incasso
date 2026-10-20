@@ -488,11 +488,12 @@ app.post('/api/checkout', async (req, res) => {
     const user_ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     if (utms) utms.user_ip = user_ip;
 
-    const clickId = ads.pickGoogleClickId(utms);
+    const clickIds = ads.collectClickIds(utms);
     const packageSlug = ads.normalizePackageSlug(package);
     const checkoutLanguage = ads.normalizeLanguage(language || (utms && (utms.lang || utms.language)));
-    // Compact copy for Mollie metadata (1kB limit) — keep exactly one click id
-    const mollieUtms = ads.compactUtmsForMollie(utms, clickId);
+    // Compact copy for Mollie metadata (1kB limit). All click ids are kept;
+    // fitMollieMetadata sheds user-agent/IP first if the cap is hit.
+    const mollieUtms = ads.compactUtmsForMollie(utms, clickIds);
 
     // Load config for dynamic settings
     const config = await getConfig(req.tenant);
@@ -543,10 +544,31 @@ app.post('/api/checkout', async (req, res) => {
     const sequenceType = isRecurring ? 'first' : 'oneoff';
 
     const yearlyAmountExVat = ads.conversionValueExVat(yearlyTotalExcl).toFixed(2);
-    const attributionMeta = {};
-    if (clickId.gclid) attributionMeta.gclid = clickId.gclid;
-    if (clickId.wbraid) attributionMeta.wbraid = clickId.wbraid;
-    if (clickId.gbraid) attributionMeta.gbraid = clickId.gbraid;
+    const paymentMetadata = ads.fitMollieMetadata({
+      tenant: req.tenant,
+      packageId: package.name,
+      packageSlug: packageSlug || undefined,
+      language: checkoutLanguage,
+      yearlyAmount: amountStr,
+      yearlyAmountExVat,
+      description: descriptionStr,
+      customerName: customer.pName,
+      businessName: customer.bName,
+      website: customer.website,
+      customerEmail: customer.email,
+      customerPhone: customer.phone || '',
+      businessAddress: customer.address,
+      businessPostal: customer.postal,
+      businessCity: customer.city,
+      businessCountry: customer.country,
+      kvkNumber: customer.kvk,
+      btwNumber: customer.btw || '',
+      modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
+      utms: mollieUtms,
+      ...ads.attributionMetadata(clickIds)
+    });
+    // Click ids as actually stored (may be shortened to fit metadata).
+    const storedClickIds = ads.collectClickIds(paymentMetadata);
 
     const payment = await mollieClient.payments.create({
       amount: {
@@ -566,44 +588,28 @@ app.post('/api/checkout', async (req, res) => {
         city: customer.city,
         country: customer.country
       },
-      metadata: {
-        tenant: req.tenant,
-        packageId: package.name,
-        packageSlug: packageSlug || undefined,
-        language: checkoutLanguage,
-        yearlyAmount: amountStr,
-        yearlyAmountExVat,
-        description: descriptionStr,
-        customerName: customer.pName,
-        businessName: customer.bName,
-        website: customer.website,
-        customerEmail: customer.email,
-        customerPhone: customer.phone || '',
-        businessAddress: customer.address,
-        businessPostal: customer.postal,
-        businessCity: customer.city,
-        businessCountry: customer.country,
-        kvkNumber: customer.kvk,
-        btwNumber: customer.btw || '',
-        modulesList: modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : '',
-        utms: mollieUtms,
-        ...attributionMeta
-      }
+      metadata: paymentMetadata
     });
 
-    // Point Mollie back at success.html with the payment id so we can
-    // confirm paid status before notifying the kiyoh.com parent.
+    // Point Mollie back at success.html with the payment id and the click
+    // ids, so a refresh of the return URL still shows which click they
+    // belonged to and the ids survive the Mollie redirect.
     try {
-      const successQs = new URLSearchParams({ orderId: payment.id, tenant: req.tenant });
       await mollieClient.payments.update(payment.id, {
-        redirectUrl: `${baseUrl}/success.html?${successQs}`
+        redirectUrl: ads.buildSuccessRedirectUrl(baseUrl, {
+          orderId: payment.id,
+          tenant: req.tenant,
+          clickIds: storedClickIds
+        })
       });
     } catch (err) {
       console.error('Failed to attach orderId to success redirectUrl:', err.message);
     }
 
-    const clickKind = clickId.gclid ? 'gclid' : clickId.wbraid ? 'wbraid' : clickId.gbraid ? 'gbraid' : null;
-    if (clickKind) console.log(`Checkout attribution: ${clickKind} persisted on ${payment.id}`);
+    const presentClicks = ads.CLICK_IDS_TO_PERSIST.filter(key => storedClickIds[key]);
+    if (presentClicks.length) {
+      console.log(`Checkout attribution: ${presentClicks.join(',')} persisted on ${payment.id}`);
+    }
 
     // Send the payment link back to the frontend
     res.json({ checkoutUrl: payment.getCheckoutUrl() });
@@ -649,10 +655,17 @@ const checkoutCompleteLimiter = rateLimit({
 
 /**
  * Success page calls this after Mollie redirects. Confirms the payment is
- * paid, then returns the Path 1 postMessage payload (no PII). GTM on
- * kiyoh.com fires from that message — we never load gtag here.
+ * exactly 'paid', then returns the Path 1 postMessage payload.
+ * value is the yearly total excluding VAT. email is the buyer address for
+ * enhanced conversions on the parent; nothing else identifying is returned.
+ * Same-origin only: the success page is on this host. Do not let other
+ * sites read the email.
  */
 app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.removeHeader('Access-Control-Allow-Origin');
+
   const orderId = String(req.query.orderId || '').trim();
   if (!/^tr_[A-Za-z0-9]+$/.test(orderId)) {
     return res.status(400).json({ error: 'Invalid orderId' });
@@ -680,28 +693,8 @@ app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
     return res.status(404).json({ error: 'Payment not found' });
   }
 
-  if (payment.status !== 'paid') {
-    return res.status(409).json({ error: 'Payment not paid', status: payment.status });
-  }
-
-  const metadata = payment.metadata || {};
-  if (!ads.shouldNotifyKiyohAds(metadata, metadata.tenant || tenant)) {
-    return res.json({ notify: false, orderId: payment.id });
-  }
-
-  const packageSlug = ads.normalizePackageSlug(metadata.packageSlug || metadata.packageId);
-  const message = ads.buildConversionMessage({
-    packageSlug,
-    language: metadata.language,
-    value: metadata.yearlyAmountExVat,
-    orderId: payment.id
-  });
-
-  if (!message.package || !message.value) {
-    return res.json({ notify: false, orderId: payment.id });
-  }
-
-  res.json({ notify: true, ...message });
+  const result = ads.buildCheckoutCompleteResponse(payment, tenant);
+  res.status(result.httpStatus).json(result.body);
 });
 
 // Setup Webhook to handle successful payments and create subscriptions.

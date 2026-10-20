@@ -9,11 +9,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Could not load config:', e);
   }
 
-  // ─── ATTRIBUTION (gclid / gbraid / wbraid / language) ────
-  // Capture on load so a later in-iframe navigation cannot drop the click id.
-  // Google accepts at most one of gclid | wbraid | gbraid.
-  const KIYOH_PARENT_ORIGINS = ['https://kiyoh.com', 'https://www.kiyoh.com'];
-  const CLICK_ID_PRIORITY = ['gclid', 'wbraid', 'gbraid'];
+  // ─── ATTRIBUTION (gclid / gbraid / wbraid / fbclid / language) ────
+  // Capture on load so a later in-iframe navigation cannot drop the click ids.
+  // All four are stored on the order. The CRM webhook still forwards one
+  // Google click id (gclid, else wbraid, else gbraid).
+  const KIYOH_PARENT_ORIGINS = [
+    'https://kiyoh.com',
+    'https://www.kiyoh.com',
+    'https://kiyoh-com-production.up.railway.app'
+  ];
+  const CLICK_IDS = ['gclid', 'gbraid', 'wbraid', 'fbclid'];
+  const CHECKOUT_CHANNEL = 'kiyoh_checkout_complete';
 
   function getParam(key) {
     const urlParams = new URLSearchParams(window.location.search);
@@ -42,60 +48,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   (function captureAttributionOnLoad() {
+    const live = new URLSearchParams(window.location.search);
     ['utm_source', 'gclid', 'gbraid', 'wbraid', 'fbclid', 'li_fat_id', 'ga4id', 'lang', 'language'].forEach(key => {
-      const fromUrl = new URLSearchParams(window.location.search).get(key);
+      const fromUrl = live.get(key);
       if (fromUrl) persistSession(key, fromUrl);
     });
+    // A landing that carries any click id replaces stored click ids, so a
+    // previous visit's gclid cannot ride along. Ids that are on this URL
+    // together (gclid + fbclid) are all kept.
+    const liveClick = CLICK_IDS.some(key => live.get(key));
+    if (liveClick) {
+      CLICK_IDS.forEach(key => {
+        if (!live.get(key)) {
+          try { sessionStorage.removeItem('kiyoh_' + key); } catch (e) {}
+        }
+      });
+    }
     try {
-      if (document.referrer) {
+      if (document.referrer && !liveClick) {
         const refUrl = new URL(document.referrer);
-        CLICK_ID_PRIORITY.concat(['utm_source', 'lang', 'language']).forEach(key => {
+        CLICK_IDS.concat(['utm_source', 'lang', 'language']).forEach(key => {
           const val = refUrl.searchParams.get(key);
           if (val && !sessionStorage.getItem('kiyoh_' + key)) persistSession(key, val);
         });
       }
     } catch (e) {}
-    // If this page load carries a click id, drop the other two so a stale
-    // session gclid cannot override a current gbraid/wbraid.
-    const live = new URLSearchParams(window.location.search);
-    const liveClick = CLICK_ID_PRIORITY.find(key => live.get(key));
-    if (liveClick) {
-      CLICK_ID_PRIORITY.forEach(key => {
-        if (key !== liveClick) {
-          try { sessionStorage.removeItem('kiyoh_' + key); } catch (e) {}
-        }
-      });
-    }
   })();
 
-  function collectClickId() {
-    const found = { gclid: '', gbraid: '', wbraid: '' };
+  // Every click id on the iframe URL. URL wins over referrer and session,
+  // and a URL that has any click id does not mix in stale session ids.
+  function collectClickIds() {
+    const found = { gclid: '', gbraid: '', wbraid: '', fbclid: '' };
     const urlParams = new URLSearchParams(window.location.search);
+    const fromUrl = {};
+    CLICK_IDS.forEach(key => {
+      const val = urlParams.get(key);
+      if (val) fromUrl[key] = val;
+    });
+    const hasUrl = Object.keys(fromUrl).length > 0;
     let referrerParams = null;
-    try {
-      if (document.referrer) referrerParams = new URL(document.referrer).searchParams;
-    } catch (e) {}
-
-    function fromLive(key) {
-      return urlParams.get(key) || (referrerParams && referrerParams.get(key)) || '';
+    if (!hasUrl) {
+      try {
+        if (document.referrer) referrerParams = new URL(document.referrer).searchParams;
+      } catch (e) {}
     }
-
-    for (const key of CLICK_ID_PRIORITY) {
-      const val = fromLive(key);
+    CLICK_IDS.forEach(key => {
+      let val = fromUrl[key] || '';
+      if (!val && !hasUrl) {
+        val = (referrerParams && referrerParams.get(key)) || '';
+        if (!val) {
+          try { val = sessionStorage.getItem('kiyoh_' + key) || ''; } catch (e) {}
+        }
+      }
       if (val) {
         found[key] = val;
         persistSession(key, val);
-        return found;
       }
-    }
-    for (const key of CLICK_ID_PRIORITY) {
-      let val = '';
-      try { val = sessionStorage.getItem('kiyoh_' + key) || ''; } catch (e) {}
-      if (val) {
-        found[key] = val;
-        return found;
-      }
-    }
+    });
     return found;
   }
 
@@ -113,14 +122,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Relay Path 1 from the Mollie success popup. success.html posts to
-  // window.opener (this iframe) with targetOrigin === payment.kiyoh.com;
-  // we forward the same payload to kiyoh.com so GTM can fire.
+  // Relay Path 1 from the Mollie success popup back to kiyoh.com.
+  // success.html posts to window.opener and, if opener was severed, on
+  // BroadcastChannel. Forward once per orderId. Target origins are the
+  // parent sites, never '*', so the buyer email stays on kiyoh.com.
+  const relayedOrders = Object.create(null);
+  function relayConversion(payload) {
+    if (!payload || payload.type !== 'kiyoh_checkout_complete' || !payload.orderId) return;
+    if (relayedOrders[payload.orderId]) return;
+    try {
+      if (sessionStorage.getItem('kiyoh_ads_relayed_' + payload.orderId) === '1') return;
+      sessionStorage.setItem('kiyoh_ads_relayed_' + payload.orderId, '1');
+    } catch (e) {}
+    relayedOrders[payload.orderId] = true;
+    postToKiyohParent(payload);
+  }
   window.addEventListener('message', function (e) {
     if (e.origin !== window.location.origin) return;
-    if (!e.data || e.data.type !== 'kiyoh_checkout_complete') return;
-    postToKiyohParent(e.data);
+    relayConversion(e.data);
   });
+  try {
+    const checkoutChannel = new BroadcastChannel(CHECKOUT_CHANNEL);
+    checkoutChannel.onmessage = function (ev) { relayConversion(ev.data); };
+  } catch (e) {}
 
   // ─── STATE ───────────────────────────────────────────────
   const onlinePackages = config.packages.filter(p => !p.offline);
@@ -423,18 +447,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    const clickId = collectClickId();
+    const clickIds = collectClickIds();
     const language = collectLanguage();
-    const utmKeys = ['utm_source', 'fbclid', 'li_fat_id', 'ga4id'];
+    const utmKeys = ['utm_source', 'li_fat_id', 'ga4id'];
     const utms = { user_agent: navigator.userAgent || '', lang: language };
     utmKeys.forEach(key => {
       const val = getParam(key);
       utms[key] = val;
       if (val) persistSession(key, val);
     });
-    if (clickId.gclid) utms.gclid = clickId.gclid;
-    else if (clickId.wbraid) utms.wbraid = clickId.wbraid;
-    else if (clickId.gbraid) utms.gbraid = clickId.gbraid;
+    CLICK_IDS.forEach(key => {
+      if (clickIds[key]) utms[key] = clickIds[key];
+    });
 
     try {
       // Get tenant from URL query param (e.g., ?tenant=klantenvertellen)
