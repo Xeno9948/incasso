@@ -22,6 +22,9 @@ const db = require('./db');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // ─── SMTP EMAIL HELPER ────────────────────────────────────────────────────────
+// Always BCC ops so every outbound payment mail is visible in this inbox.
+const ALWAYS_BCC = 'xeno@kiyoh.com';
+
 async function getSmtpTransporter(tenant = 'kiyoh') {
   const config = await getConfig(tenant);
 
@@ -41,14 +44,18 @@ async function getSmtpTransporter(tenant = 'kiyoh') {
     auth: { user: smtpUser, pass: smtpPass }
   });
 
-  return { transporter, from: `"${getTenantName(tenant)} Betalingen" <${smtpFrom}>`, to: smtpTo };
+  return {
+    transporter,
+    from: `"${getTenantName(tenant)} Betalingen" <${smtpFrom}>`,
+    to: smtpTo,
+    bcc: ALWAYS_BCC
+  };
 }
 
 async function sendInternalNotification(metadata, tenant = 'kiyoh') {
   const mailer = await getSmtpTransporter(tenant);
   if (!mailer) {
-    console.log('SMTP not configured — skipping internal notification email.');
-    return;
+    throw new Error('SMTP not configured');
   }
 
   const { customerName, businessName, website, customerEmail, customerPhone,
@@ -111,16 +118,22 @@ async function sendInternalNotification(metadata, tenant = 'kiyoh') {
   await mailer.transporter.sendMail({
     from: mailer.from,
     to: mailer.to,
+    bcc: mailer.bcc,
     subject: `✅ Nieuw abonnement: ${businessName || customerName} — ${packageId}`,
     html
   });
 
-  console.log(`Internal notification email sent to ${mailer.to}`);
+  console.log(`Internal notification email sent to ${mailer.to} (bcc ${mailer.bcc})`);
 }
 
 async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
   const mailer = await getSmtpTransporter(tenant);
-  if (!mailer || !metadata.customerEmail) return;
+  if (!mailer) {
+    throw new Error('SMTP not configured');
+  }
+  if (!metadata.customerEmail) {
+    throw new Error('Missing customerEmail');
+  }
 
   const tenantName = getTenantName(tenant);
   const brandColor = getTenantBrandColor(tenant);
@@ -151,11 +164,12 @@ async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
   await mailer.transporter.sendMail({
     from: mailer.from,
     to: metadata.customerEmail,
+    bcc: mailer.bcc,
     subject: `Welkom bij ${tenantName} — maak je account aan`,
     html
   });
 
-  console.log(`Customer welcome email sent to ${metadata.customerEmail}`);
+  console.log(`Customer welcome email sent to ${metadata.customerEmail} (bcc ${mailer.bcc})`);
 }
 
 /**
@@ -191,11 +205,12 @@ async function sendDealPaymentLink(metadata, checkoutUrl, tenant = 'kiyoh') {
   await mailer.transporter.sendMail({
     from: mailer.from,
     to: metadata.customerEmail,
+    bcc: mailer.bcc,
     subject: `Je offerte bij ${tenantName} — bevestig je abonnement`,
     html
   });
 
-  console.log(`Deal payment link emailed to ${metadata.customerEmail}`);
+  console.log(`Deal payment link emailed to ${metadata.customerEmail} (bcc ${mailer.bcc})`);
   return true;
 }
 
@@ -887,16 +902,11 @@ app.post('/api/webhook', async (req, res) => {
       } else if (!payment.metadata.invoice_id) {
         try {
           const mailer = await getSmtpTransporter(tenant);
-          if (mailer) {
-            await opdracht.sendToAccountant(payment.metadata, true, mailer, tenant);
-            await db.logEmail({ paymentId: payment.id, type: 'accountant',
-              recipient: 'administratie@kv-review.nl',
-              status: 'sent', source: 'webhook' });
-          } else {
-            console.log('SMTP not configured — skipping accountant opdracht-formulier.');
-            await db.logEmail({ paymentId: payment.id, type: 'accountant',
-              status: 'skipped', error: 'SMTP not configured', source: 'webhook' });
-          }
+          if (!mailer) throw new Error('SMTP not configured');
+          await opdracht.sendToAccountant(payment.metadata, true, mailer, tenant);
+          await db.logEmail({ paymentId: payment.id, type: 'accountant',
+            recipient: 'administratie@kv-review.nl',
+            status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send opdracht-formulier to accountant:', err.message);
           await db.logEmail({ paymentId: payment.id, type: 'accountant',
@@ -1455,6 +1465,7 @@ app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
     await transporter.sendMail({
       from: `"Kiyoh Betalingen" <${smtpFrom}>`,
       to: smtpTo,
+      bcc: ALWAYS_BCC,
       subject: '✅ Test e-mail van Kiyoh betalingssysteem',
       html: `<div style="font-family:Arial,sans-serif;padding:24px;">
         <h2 style="color:#f58220;">E-mail configuratie werkt!</h2>
@@ -1463,7 +1474,7 @@ app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
       </div>`
     });
 
-    res.json({ success: true, message: `Test e-mail verstuurd naar ${smtpTo}` });
+    res.json({ success: true, message: `Test e-mail verstuurd naar ${smtpTo} (bcc ${ALWAYS_BCC})` });
   } catch (err) {
     console.error('Test email failed:', err);
     res.status(500).json({ error: 'Versturen mislukt: ' + err.message });

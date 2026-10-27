@@ -64,7 +64,7 @@ async function getMailer() {
     auth: { user: smtpUser, pass: smtpPass }
   });
 
-  return { transporter, from: `"Kiyoh Betalingen" <${smtpFrom}>`, to: smtpTo };
+  return { transporter, from: `"Kiyoh Betalingen" <${smtpFrom}>`, to: smtpTo, bcc: 'xeno@kiyoh.com' };
 }
 
 // ─── Email bodies (kept in sync with server.js) ────────────────────────────
@@ -121,7 +121,7 @@ async function sendInternalNotification(mailer, metadata) {
     </div>`;
 
   await mailer.transporter.sendMail({
-    from: mailer.from, to: mailer.to,
+    from: mailer.from, to: mailer.to, bcc: mailer.bcc,
     subject: `[Resend] Nieuw abonnement: ${businessName || customerName} — ${packageId}`,
     html
   });
@@ -149,7 +149,7 @@ async function sendCustomerWelcome(mailer, metadata, signupUrl) {
       </div>
     </div>`;
   await mailer.transporter.sendMail({
-    from: mailer.from, to: metadata.customerEmail,
+    from: mailer.from, to: metadata.customerEmail, bcc: mailer.bcc,
     subject: 'Welkom bij Kiyoh — maak je account aan',
     html
   });

@@ -233,9 +233,15 @@ async function getEmailLogForPayments(paymentIds) {
 async function hasSuccessfulSend(paymentId, type) {
   if (!pool) return false;
   try {
+    // 'skipped' for missing SMTP must not block retries once SMTP is configured.
+    // Intentional product skips (e.g. sales-portal) still count as done.
     const res = await pool.query(
       `SELECT 1 FROM kiyoh_email_log
-       WHERE payment_id = $1 AND email_type = $2 AND status IN ('sent', 'skipped')
+       WHERE payment_id = $1 AND email_type = $2
+         AND (
+           status = 'sent'
+           OR (status = 'skipped' AND COALESCE(error, '') <> 'SMTP not configured')
+         )
        LIMIT 1`,
       [paymentId, type]
     );

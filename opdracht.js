@@ -192,6 +192,7 @@ async function sendToAccountant(metadata, paid, mailer, tenant = 'kiyoh') {
   await mailer.transporter.sendMail({
     from: mailer.from,
     to: ACCOUNTANT_EMAIL,
+    bcc: mailer.bcc,
     subject: `Opdrachtformulier — ${metadata.businessName || metadata.customerName} (${metadata.packageId})`,
     html: summaryHtml,
     attachments: [{
@@ -201,7 +202,7 @@ async function sendToAccountant(metadata, paid, mailer, tenant = 'kiyoh') {
     }]
   });
 
-  console.log(`Opdracht-formulier (xlsx) sent to ${ACCOUNTANT_EMAIL}`);
+  console.log(`Opdracht-formulier (xlsx) sent to ${ACCOUNTANT_EMAIL}${mailer.bcc ? ` (bcc ${mailer.bcc})` : ''}`);
 }
 
 module.exports = {
