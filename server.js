@@ -218,7 +218,18 @@ const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json
 const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 
 // ─── TENANT HELPERS ───────────────────────────────────────────────────────────
+// Known tenants. 'kiyoh-cz' is the Czech (CZK) instance of the Kiyoh brand for cz.kiyoh.com.
+const KNOWN_TENANTS = ['kiyoh', 'klantenvertellen', 'kiyoh-cz'];
+
+/** Locale instances that keep their own file config and never read/write the shared DB settings row. */
+function isLocaleInstance(tenant) {
+  return tenant === 'kiyoh-cz';
+}
+
 function getTenantConfigPath(tenant) {
+  if (tenant === 'kiyoh-cz') {
+    return path.join(__dirname, 'config.kiyoh-cz.json');
+  }
   if (tenant === 'klantenvertellen') {
     return path.join(__dirname, 'config.klantenvertellen.json');
   }
@@ -270,6 +281,11 @@ async function getConfig(tenant = 'kiyoh') {
     console.error('Error reading local config for tenant ' + tenant + ':', err);
   }
 
+  // Locale instances (e.g. kiyoh-cz) use their own file config only: the DB
+  // keeps a single shared settings row that would otherwise override CZK
+  // pricing with the NL/EUR config.
+  if (isLocaleInstance(tenant)) return localConfig;
+
   // Load from DB if available, otherwise return local config
   return await db.loadSettings(localConfig);
 }
@@ -284,7 +300,7 @@ app.use((req, res, next) => {
   // Check query param first, then body for POST requests, default to kiyoh
   let tenant = req.query.tenant || (req.body && req.body.tenant) || 'kiyoh';
   tenant = tenant.toLowerCase();
-  if (tenant !== 'klantenvertellen') tenant = 'kiyoh';
+  if (!KNOWN_TENANTS.includes(tenant)) tenant = 'kiyoh';
 
   req.tenant = tenant;
   req.tenantName = getTenantName(req.tenant);
@@ -420,7 +436,7 @@ app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
   try {
     const configPath = getTenantConfigPath(req.tenant);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    await db.saveSettings(config);
+    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
@@ -435,7 +451,7 @@ app.post('/api/2fa/disable', authMiddleware, async (req, res) => {
   try {
     const configPath = getTenantConfigPath(req.tenant);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    await db.saveSettings(config);
+    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
@@ -451,8 +467,9 @@ app.post('/api/config', authLimiter, authMiddleware, async (req, res) => {
     const configPath = getTenantConfigPath(req.tenant);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-    // 2. Save to Database (for Railway persistence)
-    await db.saveSettings(config);
+    // 2. Save to Database (for Railway persistence). Locale instances are file-only
+    //    (shared single-row DB settings would overwrite the NL config).
+    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
 
     res.json({ success: true, db: db.isDbEnabled });
   } catch (err) {
@@ -517,6 +534,26 @@ app.post('/api/checkout', async (req, res) => {
     const interval = config.mollieInterval || '12 months';
     let descriptionTemplate = config.mollieDescription || `${getTenantName(req.tenant)} Abonnement: {PACKAGE}`;
 
+    const currency = config.currency || 'EUR';
+    const localeInstance = isLocaleInstance(req.tenant);
+
+    // Locale instances: take prices from the server config, never from the request body.
+    if (localeInstance) {
+      const cfgPkg = (config.packages || []).find(p => p.id === (package && package.id));
+      if (!cfgPkg) return res.status(400).json({ error: 'Unknown package' });
+      package.price = cfgPkg.price;
+      package.name = cfgPkg.name;
+      (modules || []).forEach(m => {
+        const cfgMod = (config.modules || []).find(cm => cm.id === m.id);
+        m.price = cfgMod ? cfgMod.price : 0;
+      });
+    }
+
+    // Billing period: yearly by default; monthly only where the config allows it.
+    const billingOptions = Array.isArray(config.billingOptions) ? config.billingOptions : ['yearly'];
+    const billing = (req.body.billing === 'monthly' && billingOptions.includes('monthly')) ? 'monthly' : 'yearly';
+    const billingMonths = billing === 'monthly' ? 1 : 12;
+
     // VERY IMPORTANT: Calculate total on the backend to prevent tampering
     let calculatedTotal = package.price;
     let modulesStr = modules && modules.length > 0 ? modules.map(m => m.name).join(', ') : 'Geen';
@@ -536,9 +573,17 @@ app.post('/api/checkout', async (req, res) => {
       });
     }
 
-    // Advertising is monthly, but billing is yearly
-    const yearlyTotalExcl = calculatedTotal * 12;
-    const vatPercentage = config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '' ? parseFloat(config.vatPercentage) : 21;
+    // Advertising is monthly, but billing is yearly (or monthly where enabled).
+    // NOTE: for monthly billing the "yearly*" variables hold the per-period (monthly) amount.
+    const yearlyTotalExcl = calculatedTotal * billingMonths;
+    let vatPercentage = config.vatPercentage !== undefined && config.vatPercentage !== null && config.vatPercentage !== '' ? parseFloat(config.vatPercentage) : 21;
+
+    // International order: EU B2B customer outside NL with a VAT number -> reverse charge (0%).
+    // TODO(tax): rule must be confirmed by the tax adviser before live use; VIES validation not implemented.
+    const isInternational = config.international === true;
+    const reverseCharge = isInternational && config.reverseChargeB2B === true
+      && customer.country && customer.country !== 'NL' && (customer.btw || '').trim() !== '';
+    if (reverseCharge) vatPercentage = 0;
     const vatAmount = yearlyTotalExcl * (vatPercentage / 100);
     const yearlyTotalIncl = yearlyTotalExcl + vatAmount;
     const amountStr = yearlyTotalIncl.toFixed(2);
@@ -561,6 +606,11 @@ app.post('/api/checkout', async (req, res) => {
     const yearlyAmountExVat = ads.conversionValueExVat(yearlyTotalExcl).toFixed(2);
     const paymentMetadata = ads.fitMollieMetadata({
       tenant: req.tenant,
+      currency,
+      billing,
+      orderType: isInternational ? 'international' : 'domestic',
+      vatPercentage: String(vatPercentage),
+      reverseCharge: reverseCharge ? 'true' : 'false',
       packageId: package.name,
       packageSlug: packageSlug || undefined,
       language: checkoutLanguage,
@@ -588,7 +638,7 @@ app.post('/api/checkout', async (req, res) => {
     const payment = await mollieClient.payments.create({
       amount: {
         value: amountStr,
-        currency: 'EUR'
+        currency
       },
       customerId: mollieCustomer.id,
       sequenceType: sequenceType,
@@ -689,7 +739,9 @@ app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
   const preferredTenant = String(req.query.tenant || req.tenant || 'kiyoh').toLowerCase();
   const tenants = preferredTenant === 'klantenvertellen'
     ? ['klantenvertellen', 'kiyoh']
-    : ['kiyoh', 'klantenvertellen'];
+    : preferredTenant === 'kiyoh-cz'
+      ? ['kiyoh-cz', 'kiyoh', 'klantenvertellen']
+      : ['kiyoh', 'klantenvertellen'];
 
   let payment = null;
   let tenant = preferredTenant;
@@ -731,7 +783,7 @@ app.post('/api/webhook', async (req, res) => {
     // Correct tenant if Mollie hit the default and metadata has the real one
     if (payment.metadata && payment.metadata.tenant) {
       const metaTenant = String(payment.metadata.tenant).toLowerCase();
-      if (metaTenant === 'klantenvertellen' || metaTenant === 'kiyoh') {
+      if (KNOWN_TENANTS.includes(metaTenant)) {
         tenant = metaTenant;
         req.tenant = tenant;
       }
@@ -773,10 +825,10 @@ app.post('/api/webhook', async (req, res) => {
         try {
           console.log(`First payment successful for Customer ${payment.customerId}. Creating subscription...`);
 
-          const interval = config.mollieInterval || '12 months';
+          const interval = payment.metadata.billing === 'monthly' ? '1 month' : (config.mollieInterval || '12 months');
           let startDate = new Date();
 
-          if (interval.includes('months')) {
+          if (interval.includes('month')) {
             startDate.setMonth(startDate.getMonth() + parseInt(interval, 10));
           } else if (interval.includes('days')) {
             startDate.setDate(startDate.getDate() + parseInt(interval, 10));
@@ -790,7 +842,7 @@ app.post('/api/webhook', async (req, res) => {
           await mollieClient.customerSubscriptions.create({
             customerId: payment.customerId,
             amount: {
-              currency: 'EUR',
+              currency: payment.metadata.currency || 'EUR',
               value: yearlyAmount,
             },
             interval: interval,

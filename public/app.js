@@ -1,9 +1,31 @@
+// Locale instance support (e.g. ?tenant=kiyoh-cz for cz.kiyoh.com, CZK pricing).
+const TENANT_PARAM = new URLSearchParams(window.location.search).get('tenant') || 'kiyoh';
+const IS_LOCALE = TENANT_PARAM === 'kiyoh-cz';
+const CUR = IS_LOCALE ? 'CZK ' : '€';
+if (IS_LOCALE) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('customer-country');
+    if (sel && ![...sel.options].some(o => o.value === 'CZ')) {
+      const o = new Option('Česká republika', 'CZ', true, true); sel.add(o, 0);
+    }
+    const form = document.querySelector('form');
+    if (form && !document.getElementById('billing-period')) {
+      const wrap = document.createElement('div');
+      wrap.className = 'intl-order-note';
+      wrap.style.cssText = 'margin:10px 0;padding:8px 10px;border:1px solid #f58220;border-radius:6px;font-size:.85rem;';
+      wrap.innerHTML = '<strong>International order (CZK)</strong> — ' +
+        '<label>Billing: <select id="billing-period"><option value="yearly" selected>Yearly</option><option value="monthly">Monthly</option></select></label>';
+      form.prepend(wrap);
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
 
   // ─── LOAD CONFIG ─────────────────────────────────────────
   let config = { packages: [], modules: [], coreFeatures: [], googleAdsConversionId: '', googleAdsConversionLabel: '', vatPercentage: 21 };
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch(IS_LOCALE ? `/api/config?tenant=${encodeURIComponent(TENANT_PARAM)}` : '/api/config');
     config = await res.json();
   } catch (e) {
     console.error('Could not load config:', e);
@@ -171,9 +193,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         ${pkg.popular ? '<div class="popular-badge">Meest gekozen</div>' : ''}
         <h3>${pkg.name}</h3>
         <p>${pkg.subtitle}</p>
-        <div class="price">€${pkg.price}<span>/mnd</span></div>
+        <div class="price">${CUR}${pkg.price}<span>/mnd</span></div>
         <div class="billing-note" style="font-size:0.85rem;color:#666;margin-top:5px;">
-          Jaarlijks gefactureerd: <strong>€${yearlyTotal},- /jaar</strong>
+          Jaarlijks gefactureerd: <strong>${CUR}${yearlyTotal},- /jaar</strong>
         </div>
       </div>
       <ul class="features-list">
@@ -235,8 +257,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           <p>${mod.description}</p>
         </div>
         <div class="pm-price-wrap">
-          <span class="pm-price">${isProductreviews ? '<span class="pm-vanaf">vanaf </span>' : ''}€${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
-          <div class="pm-yearly">${isProductreviews ? 'Jaarlijks vanaf' : 'Jaarlijks'}: €${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
+          <span class="pm-price">${isProductreviews ? '<span class="pm-vanaf">vanaf </span>' : ''}${CUR}${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
+          <div class="pm-yearly">${isProductreviews ? 'Jaarlijks vanaf' : 'Jaarlijks'}: ${CUR}${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
           <div class="pm-select-btn">Voeg toe</div>
         </div>`;
       modulesGrid.appendChild(card);
@@ -365,7 +387,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function updateTotalPreview() {
     let monthlyTotal = state.package.price;
     state.modules.forEach(m => { monthlyTotal += m.price; });
-    modalTotalPreview.textContent = `€${monthlyTotal}/mnd`;
+    modalTotalPreview.textContent = `${CUR}${monthlyTotal}/mnd`;
   }
 
   // ─── MODAL NAVIGATION ─────────────────────────────────────
@@ -409,7 +431,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function formatEuro(amount) {
-    return `€${amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}`;
+    return `${CUR}${amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}`;
   }
 
   // ─── CHECKOUT ─────────────────────────────────────────────
@@ -473,7 +495,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           customer: { pName, bName, kvk, btw, address, postal, city, country, website, email, phone },
           utms,
           language,
-          tenant
+          tenant,
+          billing: (document.getElementById('billing-period') || {}).value || 'yearly'
         })
       });
 
