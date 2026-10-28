@@ -1,0 +1,21 @@
+{
+  "_note": "Kiyoh CZ (cz.kiyoh.com) locale instance. PROPOSED launch prices, not final. Mollie key is NOT stored here: set it via Railway env/admin, test mode only until approved.",
+  "tenant": "kiyoh-cz",
+  "brand": "Kiyoh CZ",
+  "currency": "CZK",
+  "locale": "cs-CZ",
+  "international": true,
+  "reverseChargeB2B": true,
+  "defaultCountry": "CZ",
+  "vatPercentage": 21,
+  "billingOptions": ["yearly", "monthly"],
+  "mollieTestMode": true,
+  "mollieMethods": "creditcard",
+  "mollieInterval": "12 months",
+  "packages": [
+    { "id": "go", "name": "Go", "price": 690 },
+    { "id": "pro", "name": "Pro", "price": 990 },
+    { "id": "premium", "name": "Premium", "price": 2290 }
+  ],
+  "modules": []
+}

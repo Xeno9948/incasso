@@ -41,6 +41,14 @@ function normalize(s) {
 
 // The "Label" dropdown on the opdrachtformulier (Data sheet) supports
 // both brands sold through this app.
+function isInternational(metadata, tenant) {
+  return (metadata && metadata.orderType === 'international') || tenant === 'kiyoh-cz';
+}
+function currencySymbol(metadata) {
+  const c = (metadata && metadata.currency) || 'EUR';
+  return c === 'EUR' ? '€' : c + ' ';
+}
+
 function getBrandName(tenant) {
   return tenant === 'klantenvertellen' ? 'Klantenvertellen' : 'Kiyoh';
 }
@@ -135,11 +143,13 @@ function fillXlsx(metadata, paid, tenant = 'kiyoh') {
   const brand = getBrandName(tenant);
   const tier  = metadata.packageId || '';
   setText(ws, 'C32', brand);
-  setText(ws, 'C33', tier ? `${brand} ${tier}` : brand);
+  const intl = isInternational(metadata, tenant);
+  const intlTag = intl ? ` — INTERNATIONAAL (${metadata.businessCountry || '?'}, ${metadata.currency || 'EUR'})` : '';
+  setText(ws, 'C33', (tier ? `${brand} ${tier}` : brand) + intlTag);
 
   const invites = PACKAGE_INVITES[normalize(metadata.packageId)];
   if (invites) setNumber(ws, 'C35', invites);
-  setText(ws, 'C36', '12 maanden');
+  setText(ws, 'C36', metadata.billing === 'monthly' ? '1 maand (maandelijks)' : '12 maanden');
 
   // ─── Prijs inclusief: tick matching modules ───────────────────────
   const selected = (metadata.modulesList || '')
@@ -150,9 +160,13 @@ function fillXlsx(metadata, paid, tenant = 'kiyoh') {
   }
 
   // ─── Toelichting factuur ──────────────────────────────────────────
-  setText(ws, 'C45', paid
-    ? 'Eerste jaarbedrag betaald via Mollie'
-    : 'Nog niet betaald');
+  const periodLabel = metadata.billing === 'monthly' ? 'maandbedrag' : 'jaarbedrag';
+  const intlNote = intl
+    ? ` | INTERNATIONALE ORDER — valuta ${metadata.currency || 'EUR'}, land ${metadata.businessCountry || '?'}, btw ${metadata.vatPercentage ?? '?'}%${metadata.reverseCharge === 'true' ? ' (btw verlegd)' : ''}`
+    : '';
+  setText(ws, 'C45', (paid
+    ? `Eerste ${periodLabel} betaald via Mollie`
+    : 'Nog niet betaald') + intlNote);
 
   // ─── Product verkocht ─────────────────────────────────────────────
   setNumber(ws, 'C58', toExcelDate(new Date())); // Datum
@@ -174,15 +188,18 @@ async function sendToAccountant(metadata, paid, mailer, tenant = 'kiyoh') {
   const modules = metadata.modulesList || 'Geen extra modules';
   const brand = getBrandName(tenant);
   const brandColor = getBrandColor(tenant);
+  const intl = isInternational(metadata, tenant);
+  const cur = currencySymbol(metadata);
 
   const summaryHtml = `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
-      <h2 style="color:${brandColor};">Nieuw opdrachtformulier</h2>
+      <h2 style="color:${brandColor};">Nieuw opdrachtformulier${intl ? ' — INTERNATIONAAL' : ''}</h2>
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
         <tr><td style="padding:6px 0;color:#888;width:160px;">Bedrijf</td><td><strong>${metadata.businessName || metadata.customerName}</strong></td></tr>
         <tr><td style="padding:6px 0;color:#888;">Pakket</td><td>${metadata.packageId || '—'}</td></tr>
         <tr><td style="padding:6px 0;color:#888;">Extra modules</td><td>${modules}</td></tr>
-        <tr><td style="padding:6px 0;color:#888;">Jaarbedrag</td><td>€${yearly}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">${metadata.billing === 'monthly' ? 'Maandbedrag' : 'Jaarbedrag'}</td><td>${cur}${yearly}</td></tr>
+        ${intl ? `<tr><td style="padding:6px 0;color:#888;">Internationaal</td><td><strong>Ja</strong> — land ${metadata.businessCountry || '?'}, valuta ${metadata.currency || 'EUR'}, btw ${metadata.vatPercentage ?? '?'}%${metadata.reverseCharge === 'true' ? ' (verlegd)' : ''}</td></tr>` : ''}
         <tr><td style="padding:6px 0;color:#888;">Betaald</td><td><strong style="color:${paid ? '#68b03d' : '#d9534f'};">${paid ? 'Ja, eerste jaarbedrag voldaan' : 'Nog niet'}</strong></td></tr>
       </table>
       <p style="margin-top:20px;">Het ingevulde opdrachtformulier zit als Excel-bijlage bij deze mail.</p>
@@ -193,7 +210,7 @@ async function sendToAccountant(metadata, paid, mailer, tenant = 'kiyoh') {
     from: mailer.from,
     to: ACCOUNTANT_EMAIL,
     bcc: mailer.bcc,
-    subject: `Opdrachtformulier — ${metadata.businessName || metadata.customerName} (${metadata.packageId})`,
+    subject: `${intl ? '[INTERNATIONAAL] ' : ''}Opdrachtformulier — ${metadata.businessName || metadata.customerName} (${metadata.packageId})`,
     html: summaryHtml,
     attachments: [{
       filename: fileName,
