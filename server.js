@@ -256,11 +256,34 @@ function getTenantBrandColor(tenant) {
   }
   return '#f58220'; // Kiyoh orange
 }
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kiyoh-admin-2024';
+// No hardcoded fallbacks: if a password env var is missing, that login is
+// disabled (every attempt is rejected) instead of accepting a known default.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
 // Separate, lower-privilege password for the standalone "Nieuwe Deal" sales
 // page — lets it out of anyone's hands without also handing out Mollie live
 // keys, SMTP credentials, or the CRM webhook secret from the full admin panel.
-const SALES_PASSWORD = process.env.SALES_PASSWORD || 'kiyoh-sales-2024';
+const SALES_PASSWORD = process.env.SALES_PASSWORD || null;
+if (!ADMIN_PASSWORD) console.error('SECURITY: ADMIN_PASSWORD is not set — admin login disabled.');
+if (!SALES_PASSWORD) console.error('SECURITY: SALES_PASSWORD is not set — sales login disabled.');
+
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  const ba = Buffer.from(a), bb = Buffer.from(b);
+  return ba.length === bb.length && require('crypto').timingSafeEqual(ba, bb);
+}
+const isAdminPw = (pw) => safeEqual(pw, ADMIN_PASSWORD);
+const isSalesPw = (pw) => safeEqual(pw, SALES_PASSWORD);
+
+// Config keys that must never be sent to unauthenticated clients.
+const SECRET_CONFIG_KEY = /(key|secret|pass(word)?|token|smtpuser|webhook)/i;
+const PUBLIC_SAFE_KEYS = new Set(['googleAdsConversionId', 'googleAdsConversionLabel']);
+function stripSecrets(cfg) {
+  const out = {};
+  for (const [k, v] of Object.entries(cfg || {})) {
+    if (PUBLIC_SAFE_KEYS.has(k) || !SECRET_CONFIG_KEY.test(k)) out[k] = v;
+  }
+  return out;
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -327,7 +350,7 @@ const authLimiter = rateLimit({
 // Authentication Middleware
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== ADMIN_PASSWORD) {
+  if (!isAdminPw(authHeader)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
@@ -338,7 +361,7 @@ const authMiddleware = (req, res, next) => {
 // deal-creation endpoint — never grants access to config/settings routes.
 const dealAuthMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || (authHeader !== ADMIN_PASSWORD && authHeader !== SALES_PASSWORD)) {
+  if (!isAdminPw(authHeader) && !isSalesPw(authHeader)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
@@ -349,9 +372,15 @@ async function getMollieClient(tenant = 'kiyoh') {
   const config = await getConfig(tenant);
   const testMode = config.mollieTestMode !== false; // Default to true if not specified
   
-  // Priority: 1. Env Var, 2. Config, 3. Hardcoded Test Key
-  const liveKey = process.env.MOLLIE_LIVE_KEY || config.mollieLiveKey;
-  const testKey = process.env.MOLLIE_TEST_KEY || config.mollieTestKey || 'test_hzHT8sHqADu26Dwmnt36Fu3Wmc5DfD';
+  // Priority: 1. per-tenant env var (MOLLIE_LIVE_KEY_KIYOH_CZ etc.), 2. global env var,
+  // 3. MOLLIE_API_KEY (matched by its test_/live_ prefix), 4. admin-saved config.
+  // No hardcoded key.
+  const suffix = '_' + String(tenant).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const apiKeyEnv = process.env.MOLLIE_API_KEY || '';
+  const liveKey = process.env['MOLLIE_LIVE_KEY' + suffix] || process.env.MOLLIE_LIVE_KEY
+    || (apiKeyEnv.startsWith('live_') ? apiKeyEnv : '') || config.mollieLiveKey;
+  const testKey = process.env['MOLLIE_TEST_KEY' + suffix] || process.env.MOLLIE_TEST_KEY
+    || (apiKeyEnv.startsWith('test_') ? apiKeyEnv : '') || config.mollieTestKey;
   
   const apiKey = testMode ? testKey : liveKey;
   
@@ -364,12 +393,14 @@ async function getMollieClient(tenant = 'kiyoh') {
 
 // Setup Config API Routes
 app.get('/api/config', async (req, res) => {
-  res.json(await getConfig(req.tenant));
+  const cfg = await getConfig(req.tenant);
+  // Full config (incl. keys) only for the admin panel; everyone else gets a stripped copy.
+  res.json(isAdminPw(req.headers.authorization) ? cfg : stripSecrets(cfg));
 });
 
 app.post('/api/auth', authLimiter, async (req, res) => {
   const { password } = req.body;
-  if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+  if (!isAdminPw(password)) return res.status(401).json({ error: 'Unauthorized' });
 
   const config = await getConfig(req.tenant);
   if (config.twoFactorEnabled && config.twoFactorSecret) {
@@ -383,7 +414,7 @@ app.post('/api/auth', authLimiter, async (req, res) => {
 // lower-privilege password meant to be handed to a sales team.
 app.post('/api/sales/auth', authLimiter, async (req, res) => {
   const { password } = req.body;
-  if (password !== SALES_PASSWORD && password !== ADMIN_PASSWORD) {
+  if (!isSalesPw(password) && !isAdminPw(password)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   res.json({ ok: true });
@@ -391,7 +422,7 @@ app.post('/api/sales/auth', authLimiter, async (req, res) => {
 
 app.post('/api/auth/2fa', authLimiter, async (req, res) => {
   const { password, code } = req.body;
-  if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+  if (!isAdminPw(password)) return res.status(401).json({ error: 'Unauthorized' });
 
   const config = await getConfig(req.tenant);
   if (!config.twoFactorEnabled || !config.twoFactorSecret) {
@@ -537,16 +568,20 @@ app.post('/api/checkout', async (req, res) => {
     const currency = config.currency || 'EUR';
     const localeInstance = isLocaleInstance(req.tenant);
 
-    // Locale instances: take prices from the server config, never from the request body.
-    if (localeInstance) {
+    // All tenants: take package/module prices from the server config, never from the request body.
+    {
       const cfgPkg = (config.packages || []).find(p => p.id === (package && package.id));
       if (!cfgPkg) return res.status(400).json({ error: 'Unknown package' });
-      package.price = cfgPkg.price;
+      package.price = Number(cfgPkg.price);
       package.name = cfgPkg.name;
-      (modules || []).forEach(m => {
-        const cfgMod = (config.modules || []).find(cm => cm.id === m.id);
-        m.price = cfgMod ? cfgMod.price : 0;
-      });
+      const seen = new Set();
+      for (const m of (modules || [])) {
+        const cfgMod = (config.modules || []).find(cm => (m && m.id && cm.id === m.id) || (m && m.name && cm.name === m.name));
+        if (!cfgMod || seen.has(cfgMod.id)) return res.status(400).json({ error: 'Unknown module' });
+        seen.add(cfgMod.id);
+        m.name = cfgMod.name;
+        m.price = Number(cfgMod.price) || 0;
+      }
     }
 
     // Billing period: yearly by default; monthly only where the config allows it.
