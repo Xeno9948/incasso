@@ -10,7 +10,7 @@
   "vatPercentage": 21,
   "billingOptions": ["yearly", "monthly"],
   "mollieTestMode": true,
-  "mollieMethods": ["creditcard"],
+  "mollieMethods": "creditcard",
   "mollieInterval": "12 months",
   "packages": [
     { "id": "go", "name": "Go", "price": 690 },
