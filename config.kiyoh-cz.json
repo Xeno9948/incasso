@@ -8,14 +8,99 @@
   "reverseChargeB2B": true,
   "defaultCountry": "CZ",
   "vatPercentage": 21,
-  "billingOptions": ["yearly", "monthly"],
+  "billingOptions": [
+    "yearly",
+    "monthly"
+  ],
   "mollieTestMode": true,
   "mollieMethods": "creditcard",
   "mollieInterval": "12 months",
   "packages": [
-    { "id": "go", "name": "Go", "price": 690 },
-    { "id": "pro", "name": "Pro", "price": 990 },
-    { "id": "premium", "name": "Premium", "price": 2290 }
+    {
+      "id": "go",
+      "name": "Go",
+      "price": 690,
+      "subtitle": "150 pozvánek měsíčně",
+      "features": [
+        "Recenze obchodu v Google Shopping a Ads",
+        "Lepší SEO díky recenzím",
+        "Personalizace e-mailu s pozvánkou",
+        "Automatické zvaní (pluginy)",
+        "Vlastní dotazník na míru",
+        "Odpovídání na hodnocení",
+        "Plná zákaznická podpora"
+      ],
+      "popular": false
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "price": 990,
+      "subtitle": "Od 300 pozvánek měsíčně",
+      "features": [
+        "Recenze obchodu v Google Shopping a Ads",
+        "Lepší SEO díky recenzím",
+        "Personalizace e-mailu s pozvánkou",
+        "Automatické zvaní (pluginy)",
+        "Vlastní dotazník na míru",
+        "Odpovídání na hodnocení",
+        "Plná zákaznická podpora"
+      ],
+      "popular": true
+    },
+    {
+      "id": "premium",
+      "name": "Premium",
+      "price": 2290,
+      "subtitle": "Od 3 000 pozvánek měsíčně",
+      "features": [
+        "Recenze obchodu v Google Shopping a Ads",
+        "Lepší SEO díky recenzím",
+        "Personalizace e-mailu s pozvánkou",
+        "Automatické zvaní (pluginy)",
+        "Vlastní dotazník na míru",
+        "Odpovídání na hodnocení",
+        "Plná zákaznická podpora"
+      ],
+      "popular": false
+    }
   ],
-  "modules": []
+  "modules": [],
+  "coreFeatures": [
+    {
+      "id": "shop-reviews",
+      "icon": "fas fa-star",
+      "title": "Recenze obchodu",
+      "description": "Zákazníci chtějí mít jistotu, že nakupují u důvěryhodného prodejce. Ukažte, že jste důvěryhodní.",
+      "link": "https://cz.kiyoh.com/"
+    },
+    {
+      "id": "widget",
+      "icon": "fas fa-magic",
+      "title": "Vyberte si ideální widget",
+      "description": "Široká nabídka widgetů, které sladíte s designem svého webu. Stačí zkopírovat kód.",
+      "link": "https://cz.kiyoh.com/"
+    },
+    {
+      "id": "auto-collect",
+      "icon": "fas fa-envelope-open-text",
+      "title": "Auto Collect (BCC)",
+      "description": "Sbírejte recenze automaticky přidáním adresy do skryté kopie (BCC) e-mailů.",
+      "link": "https://cz.kiyoh.com/"
+    },
+    {
+      "id": "photo",
+      "icon": "fas fa-camera",
+      "title": "Fotomodul",
+      "description": "Zákazníci mohou k recenzi přidat fotografie.",
+      "link": "https://cz.kiyoh.com/"
+    },
+    {
+      "id": "review-split",
+      "icon": "fas fa-columns",
+      "title": "Reviewsplit",
+      "description": "Větší viditelnost recenzí přes Google, Facebook a Kiyoh.",
+      "link": "https://cz.kiyoh.com/"
+    }
+  ]
 }
