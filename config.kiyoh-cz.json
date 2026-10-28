@@ -65,7 +65,67 @@
       "popular": false
     }
   ],
-  "modules": [],
+  "modules": [
+    {
+      "id": "xml-feed",
+      "icon": "fas fa-code",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Integrace XML feedu",
+      "image": "",
+      "price": 390,
+      "offline": false,
+      "description": "Zobrazujte recenze ve vlastním designu s automatickou synchronizací na webu nebo v e-mailingu."
+    },
+    {
+      "id": "easy-click",
+      "icon": "fas fa-hand-point-up",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Modul Easy Click",
+      "image": "",
+      "price": 190,
+      "offline": false,
+      "description": "Zákazníci ohodnotí jediným kliknutím přímo v e-mailu. Zvyšuje odezvu o 11 %."
+    },
+    {
+      "id": "personal-invite-link",
+      "icon": "fas fa-link",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Osobní odkaz s pozvánkou",
+      "image": "",
+      "price": 190,
+      "offline": false,
+      "description": "Posílejte personalizované pozvánky přes WhatsApp, SMS nebo Facebook s unikátními odkazy na recenze."
+    },
+    {
+      "id": "productreviews",
+      "icon": "fas fa-lock",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Productreviews",
+      "image": "https://kiyoh.com/wp-content/uploads/Shopping-sterren-768x768.png",
+      "price": 490,
+      "offline": false,
+      "description": "Sbírejte recenze na úrovni produktů a vyniknete v Google Shopping. Méně vratek."
+    },
+    {
+      "id": "qr-code",
+      "icon": "fas fa-qrcode",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Recenze přes QR kód",
+      "image": "https://kiyoh.com/wp-content/uploads/Qr-Code-Anmated-Web.gif",
+      "price": 190,
+      "offline": false,
+      "description": "Nechte zákazníky v kamenné prodejně naskenovat QR kód. Ideální pro offline propagaci a polepy dveří."
+    },
+    {
+      "id": "contact-experts",
+      "link": "https://cz.kiyoh.com/",
+      "name": "Zajímají vás naše funkce a balíčky na míru?",
+      "image": "",
+      "price": 0,
+      "offline": true,
+      "description": "Kontaktujte naše odborníky na recenze."
+    }
+  ],
   "coreFeatures": [
     {
       "id": "shop-reviews",
