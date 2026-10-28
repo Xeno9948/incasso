@@ -3,6 +3,7 @@ const { Pool } = require('pg');
 const DATABASE_URL = process.env.DATABASE_URL;
 
 let pool = null;
+let readyResolve; const ready = new Promise(r => { readyResolve = r; });
 
 if (DATABASE_URL) {
   pool = new Pool({
@@ -51,12 +52,103 @@ if (DATABASE_URL) {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      await ensureTenantSchema(pool);
       console.log('Database initialized successfully.');
     } catch (err) {
       console.error('Failed to initialize database:', err);
     }
+    readyResolve();
   };
   initDb();
+} else {
+  readyResolve();
+}
+
+// ─── PER-TENANT SETTINGS (versioned) ─────────────────────────────────────
+// One row per saved version; the newest row per tenant is the live config.
+// The legacy single-row table kiyoh_settings is left untouched (backup) and
+// still mirrors the kiyoh tenant, so a code rollback keeps working.
+async function ensureTenantSchema(p) {
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS kiyoh_tenant_settings (
+      id SERIAL PRIMARY KEY,
+      tenant VARCHAR(64) NOT NULL,
+      config JSONB NOT NULL,
+      note TEXT,
+      source VARCHAR(40),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_kiyoh_tenant_settings ON kiyoh_tenant_settings (tenant, id DESC);`);
+  await p.query(`ALTER TABLE kiyoh_email_log ADD COLUMN IF NOT EXISTS tenant VARCHAR(64);`);
+  await p.query(`ALTER TABLE kiyoh_email_log ALTER COLUMN email_type TYPE VARCHAR(40);`);
+}
+
+/**
+ * Seed per-tenant rows once. tenants: { id: fileConfig }. Tenants listed in
+ * legacyTenants get the current legacy DB row (that is what they serve today);
+ * the rest get their file config. Tenants that already have rows are skipped.
+ */
+async function migrateTenantSettings(seeds, legacyTenants, p = pool) {
+  if (!p) return [];
+  const client = p.connect ? await p.connect() : p;
+  const done = [];
+  try {
+    if (client !== p) await client.query('SELECT pg_advisory_lock(424242)');
+    let legacy;
+    for (const [tenant, fileCfg] of Object.entries(seeds)) {
+      const has = await client.query('SELECT 1 FROM kiyoh_tenant_settings WHERE tenant = $1 LIMIT 1', [tenant]);
+      if (has.rows.length) continue;
+      let cfg = fileCfg, source = 'file';
+      if (legacyTenants.includes(tenant)) {
+        if (legacy === undefined) {
+          const r = await client.query('SELECT config FROM kiyoh_settings ORDER BY id DESC LIMIT 1');
+          legacy = r.rows.length ? r.rows[0].config : null;
+        }
+        if (legacy) { cfg = legacy; source = 'legacy-db'; }
+      }
+      await client.query('INSERT INTO kiyoh_tenant_settings (tenant, config, note, source) VALUES ($1, $2, $3, $4)',
+        [tenant, cfg, 'Initial migration (' + source + ')', 'migration']);
+      done.push({ tenant, source });
+    }
+  } finally {
+    if (client !== p) { await client.query('SELECT pg_advisory_unlock(424242)'); client.release(); }
+  }
+  return done;
+}
+
+async function loadTenantSettings(tenant, p = pool) {
+  if (!p) return null;
+  const r = await p.query('SELECT config FROM kiyoh_tenant_settings WHERE tenant = $1 ORDER BY id DESC LIMIT 1', [tenant]);
+  return r.rows.length ? r.rows[0].config : null;
+}
+
+async function saveTenantSettings(tenant, config, { note, source } = {}, p = pool) {
+  if (!p) return null;
+  const r = await p.query('INSERT INTO kiyoh_tenant_settings (tenant, config, note, source) VALUES ($1, $2, $3, $4) RETURNING id, created_at',
+    [tenant, config, note || null, source || 'admin']);
+  await p.query(`DELETE FROM kiyoh_tenant_settings WHERE tenant = $1 AND id NOT IN
+    (SELECT id FROM kiyoh_tenant_settings WHERE tenant = $1 ORDER BY id DESC LIMIT 100)`, [tenant]);
+  return r.rows[0];
+}
+
+async function listTenantHistory(tenant, limit = 50, p = pool) {
+  if (!p) return [];
+  const r = await p.query('SELECT id, note, source, created_at FROM kiyoh_tenant_settings WHERE tenant = $1 ORDER BY id DESC LIMIT $2', [tenant, limit]);
+  return r.rows;
+}
+
+async function getTenantVersion(tenant, id, p = pool) {
+  if (!p) return null;
+  const r = await p.query('SELECT id, config, note, source, created_at FROM kiyoh_tenant_settings WHERE tenant = $1 AND id = $2', [tenant, id]);
+  return r.rows[0] || null;
+}
+
+async function getEmailLogForTenant(tenant, limit = 100, p = pool) {
+  if (!p) return [];
+  const r = await p.query(`SELECT payment_id, email_type, recipient, status, error, source, sent_at, tenant
+     FROM kiyoh_email_log WHERE tenant = $1 OR ($1 = 'kiyoh' AND tenant IS NULL)
+     ORDER BY sent_at DESC LIMIT $2`, [tenant, limit]);
+  return r.rows;
 }
 
 /**
@@ -190,13 +282,13 @@ async function unmarkPaymentProcessed(paymentId) {
  * email send tied to a Mollie payment so the admin UI can show
  * what was sent, when, and whether it succeeded.
  */
-async function logEmail({ paymentId, type, recipient, status, error, source }) {
+async function logEmail({ paymentId, type, recipient, status, error, source, tenant }) {
   if (!pool) return null;
   try {
     const res = await pool.query(
-      `INSERT INTO kiyoh_email_log (payment_id, email_type, recipient, status, error, source)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, sent_at`,
-      [paymentId, type, recipient || null, status, error || null, source || 'webhook']
+      `INSERT INTO kiyoh_email_log (payment_id, email_type, recipient, status, error, source, tenant)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, sent_at`,
+      [paymentId, type, recipient || null, status, error || null, source || 'webhook', tenant || null]
     );
     return res.rows[0];
   } catch (err) {
@@ -307,6 +399,14 @@ async function saveDealOverrides(paymentId, overrides) {
 }
 
 module.exports = {
+  ready,
+  ensureTenantSchema,
+  migrateTenantSettings,
+  loadTenantSettings,
+  saveTenantSettings,
+  listTenantHistory,
+  getTenantVersion,
+  getEmailLogForTenant,
   loadSettings,
   saveSettings,
   isPaymentProcessed,

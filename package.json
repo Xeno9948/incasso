@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test ads-attribution.test.js"
+    "test": "node --test ads-attribution.test.js test/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -21,5 +21,8 @@
     "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
   }
 }
