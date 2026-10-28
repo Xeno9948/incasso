@@ -2,19 +2,26 @@
 const TENANT_PARAM = new URLSearchParams(window.location.search).get('tenant') || 'kiyoh';
 const IS_LOCALE = TENANT_PARAM === 'kiyoh-cz';
 const CUR = IS_LOCALE ? 'CZK ' : '€';
+// Czech number/currency formatting for kiyoh-cz ("8 280 Kč"); other tenants unchanged.
+const DASH = IS_LOCALE ? '' : ',-';
+function money(n, dec) {
+  if (IS_LOCALE) return n.toLocaleString('cs-CZ', { minimumFractionDigits: dec ? 2 : 0, maximumFractionDigits: 2 }) + '\u00a0Kč';
+  return '€' + (dec ? n.toLocaleString('nl-NL', { minimumFractionDigits: 2 }) : String(n));
+}
 if (IS_LOCALE) {
   document.addEventListener('DOMContentLoaded', () => {
     const sel = document.getElementById('customer-country');
     if (sel && ![...sel.options].some(o => o.value === 'CZ')) {
       const o = new Option('Česká republika', 'CZ', true, true); sel.add(o, 0);
     }
+    if (sel) sel.value = 'CZ';
     const form = document.querySelector('form');
     if (form && !document.getElementById('billing-period')) {
       const wrap = document.createElement('div');
       wrap.className = 'intl-order-note';
       wrap.style.cssText = 'margin:10px 0;padding:8px 10px;border:1px solid #f58220;border-radius:6px;font-size:.85rem;';
-      wrap.innerHTML = '<strong>International order (CZK)</strong> — ' +
-        '<label>Billing: <select id="billing-period"><option value="yearly" selected>Yearly</option><option value="monthly">Monthly</option></select></label>';
+      wrap.innerHTML = '<strong>Mezinárodní objednávka (CZK)</strong> — ' +
+        '<label>Fakturace: <select id="billing-period"><option value="yearly" selected>Ročně</option><option value="monthly">Měsíčně</option></select></label>';
       form.prepend(wrap);
     }
   });
@@ -193,9 +200,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         ${pkg.popular ? '<div class="popular-badge">Meest gekozen</div>' : ''}
         <h3>${pkg.name}</h3>
         <p>${pkg.subtitle || ''}</p>
-        <div class="price">${CUR}${pkg.price}<span>/mnd</span></div>
+        <div class="price">${money(pkg.price)}<span>/mnd</span></div>
         <div class="billing-note" style="font-size:0.85rem;color:#666;margin-top:5px;">
-          Jaarlijks gefactureerd: <strong>${CUR}${yearlyTotal},- /jaar</strong>
+          Jaarlijks gefactureerd: <strong>${IS_LOCALE ? money(pkg.price * 12) : CUR + yearlyTotal + ',-'} /jaar</strong>
         </div>
       </div>
       <ul class="features-list">
@@ -257,8 +264,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           <p>${mod.description}</p>
         </div>
         <div class="pm-price-wrap">
-          <span class="pm-price">${isProductreviews ? '<span class="pm-vanaf">vanaf </span>' : ''}${CUR}${displayPrice.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}<span>/mnd</span></span>
-          <div class="pm-yearly">${isProductreviews ? 'Jaarlijks vanaf' : 'Jaarlijks'}: ${CUR}${yearly.toLocaleString('nl-NL', { minimumFractionDigits: 2 })},-</div>
+          <span class="pm-price">${isProductreviews ? '<span class="pm-vanaf">vanaf </span>' : ''}${money(displayPrice, true)}<span>/mnd</span></span>
+          <div class="pm-yearly">${isProductreviews ? 'Jaarlijks vanaf' : 'Jaarlijks'}: ${money(yearly, true)}${DASH}</div>
           <div class="pm-select-btn">Voeg toe</div>
         </div>`;
       modulesGrid.appendChild(card);
@@ -387,7 +394,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function updateTotalPreview() {
     let monthlyTotal = state.package.price;
     state.modules.forEach(m => { monthlyTotal += m.price; });
-    modalTotalPreview.textContent = `${CUR}${monthlyTotal}/mnd`;
+    modalTotalPreview.textContent = `${money(monthlyTotal)}/mnd`;
   }
 
   // ─── MODAL NAVIGATION ─────────────────────────────────────
@@ -431,7 +438,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function formatEuro(amount) {
-    return `${CUR}${amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}`;
+    return money(amount, true);
   }
 
   // ─── CHECKOUT ─────────────────────────────────────────────
