@@ -192,14 +192,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="pricing-header">
         ${pkg.popular ? '<div class="popular-badge">Meest gekozen</div>' : ''}
         <h3>${pkg.name}</h3>
-        <p>${pkg.subtitle}</p>
+        <p>${pkg.subtitle || ''}</p>
         <div class="price">${CUR}${pkg.price}<span>/mnd</span></div>
         <div class="billing-note" style="font-size:0.85rem;color:#666;margin-top:5px;">
           Jaarlijks gefactureerd: <strong>${CUR}${yearlyTotal},- /jaar</strong>
         </div>
       </div>
       <ul class="features-list">
-        ${pkg.features.map(f => `<li>${f}</li>`).join('')}
+        ${(pkg.features || []).map(f => `<li>${f}</li>`).join('')}
       </ul>
       <button class="btn ${pkg.popular ? 'btn-primary' : 'btn-outline'} package-select-btn">Selecteer ${pkg.name}</button>
     `;
@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cfGrid = document.querySelector('.core-features-grid');
   if (cfGrid) {
     cfGrid.innerHTML = '';
-    config.coreFeatures.forEach(cf => {
+    (config.coreFeatures || []).forEach(cf => {
       cfGrid.innerHTML += `
         <div class="cf-item">
           <div class="cf-icon"><i class="${cf.icon}"></i></div>
