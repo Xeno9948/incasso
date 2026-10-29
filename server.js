@@ -19,14 +19,18 @@ const authenticator = new TOTP({
 const fs = require('fs');
 const path = require('path');
 const db = require('./db');
+const tenants = require('./tenants');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // ─── SMTP EMAIL HELPER ────────────────────────────────────────────────────────
 // Always BCC ops so every outbound payment mail is visible in this inbox.
+// Legacy constant; the per-tenant CC list (notifications.cc) now replaces it and is
+// seeded with this same address so behaviour is unchanged.
 const ALWAYS_BCC = 'xeno@kiyoh.com';
 
-async function getSmtpTransporter(tenant = 'kiyoh') {
+async function getSmtpTransporter(tenant = 'kiyoh', event = 'order') {
   const config = await getConfig(tenant);
+  const rcpt = tenants.resolveRecipients(config, event);
 
   const smtpHost = config.smtpHost || process.env.SMTP_HOST;
   const smtpPort = parseInt(config.smtpPort || process.env.SMTP_PORT || '465', 10);
@@ -47,16 +51,52 @@ async function getSmtpTransporter(tenant = 'kiyoh') {
   return {
     transporter,
     from: `"${getTenantName(tenant)} Betalingen" <${smtpFrom}>`,
-    to: smtpTo,
-    bcc: ALWAYS_BCC
+    to: rcpt.to || smtpTo,
+    bcc: rcpt.bcc,
+    accountant: rcpt.accountant,
+    enabled: rcpt.enabled
   };
 }
 
+/**
+ * Optional per-tenant, per-event webhook (notifications.events[ev].webhookUrl).
+ * Signed with HMAC-SHA256 of the raw body in X-Kiyoh-Signature. Logged per tenant.
+ */
+async function fireEventWebhook(tenant, event, payload, { test = false } = {}) {
+  const cfg = await getConfig(tenant);
+  const e = tenants.getNotifications(cfg).events[event];
+  if (!e || !e.webhookUrl) return { skipped: true };
+  const body = JSON.stringify({ event, tenant, test, sentAt: new Date().toISOString(), data: payload || {} });
+  const logId = (payload && (payload.paymentId || payload.id)) || (test ? 'test-' + Date.now() : 'n/a');
+  try {
+    const resp = await fetch(e.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Kiyoh-Event': event, 'X-Kiyoh-Tenant': tenant,
+        'X-Kiyoh-Signature': tenants.signWebhook(body, e.webhookSecret) },
+      body
+    });
+    const ok = resp.status >= 200 && resp.status < 300;
+    await db.logEmail({ tenant, paymentId: String(logId).slice(0, 50), type: 'webhook:' + event, recipient: e.webhookUrl.slice(0, 250),
+      status: ok ? 'sent' : 'failed', error: ok ? null : 'HTTP ' + resp.status, source: test ? 'test' : 'webhook' });
+    return { ok, status: resp.status };
+  } catch (err) {
+    await db.logEmail({ tenant, paymentId: String(logId).slice(0, 50), type: 'webhook:' + event, recipient: e.webhookUrl.slice(0, 250),
+      status: 'failed', error: err.message, source: test ? 'test' : 'webhook' });
+    return { ok: false, error: err.message };
+  }
+}
+
+function eventForPayment(metadata) {
+  return metadata && (metadata.source === 'sales-portal' || metadata.invoice_id) ? 'dealPaid' : 'order';
+}
+
 async function sendInternalNotification(metadata, tenant = 'kiyoh') {
-  const mailer = await getSmtpTransporter(tenant);
+  const mailer = await getSmtpTransporter(tenant, eventForPayment(metadata));
   if (!mailer) {
     throw new Error('SMTP not configured');
   }
+  if (mailer.enabled === false || !mailer.to) return false;
+  fireEventWebhook(tenant, eventForPayment(metadata), metadata).catch(() => {});
 
   const { customerName, businessName, website, customerEmail, customerPhone,
           packageId, yearlyAmount, modulesList, description,
@@ -127,7 +167,10 @@ async function sendInternalNotification(metadata, tenant = 'kiyoh') {
 }
 
 async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
-  const mailer = await getSmtpTransporter(tenant);
+  const mailer = await getSmtpTransporter(tenant, 'signup');
+  if (mailer && mailer.enabled === false) return false;
+  fireEventWebhook(tenant, 'signup', metadata).catch(() => {});
+  if (mailer && mailer.to) mailer.bcc = [mailer.bcc, mailer.to].filter(Boolean).join(', ');
   if (!mailer) {
     throw new Error('SMTP not configured');
   }
@@ -178,7 +221,7 @@ async function sendCustomerWelcome(metadata, signupUrl, tenant = 'kiyoh') {
  * pricing shown anywhere — used for Klantenvertellen deals).
  */
 async function sendDealPaymentLink(metadata, checkoutUrl, tenant = 'kiyoh') {
-  const mailer = await getSmtpTransporter(tenant);
+  const mailer = await getSmtpTransporter(tenant, 'dealPaid');
   if (!mailer || !metadata.customerEmail) return false;
 
   const tenantName = getTenantName(tenant);
@@ -219,7 +262,7 @@ const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 
 // ─── TENANT HELPERS ───────────────────────────────────────────────────────────
 // Known tenants. 'kiyoh-cz' is the Czech (CZK) instance of the Kiyoh brand for cz.kiyoh.com.
-const KNOWN_TENANTS = ['kiyoh', 'klantenvertellen', 'kiyoh-cz'];
+const KNOWN_TENANTS = tenants.TENANT_IDS;
 
 /** Locale instances that keep their own file config and never read/write the shared DB settings row. */
 function isLocaleInstance(tenant) {
@@ -244,6 +287,7 @@ function getTenantSignupBuilder(tenant) {
 }
 
 function getTenantName(tenant) {
+  if (tenant === 'kiyoh-cz') return 'Kiyoh';
   if (tenant === 'klantenvertellen') {
     return 'Klantenvertellen';
   }
@@ -282,6 +326,8 @@ function stripSecrets(cfg) {
   for (const [k, v] of Object.entries(cfg || {})) {
     if (PUBLIC_SAFE_KEYS.has(k) || !SECRET_CONFIG_KEY.test(k)) out[k] = v;
   }
+  // Admin-only blocks (recipients, webhook URLs/secrets, key env names) never go public.
+  delete out.notifications; delete out.payment;
   return out;
 }
 
@@ -304,14 +350,36 @@ async function getConfig(tenant = 'kiyoh') {
     console.error('Error reading local config for tenant ' + tenant + ':', err);
   }
 
-  // Locale instances (e.g. kiyoh-cz) use their own file config only: the DB
-  // keeps a single shared settings row that would otherwise override CZK
-  // pricing with the NL/EUR config.
-  if (isLocaleInstance(tenant)) return localConfig;
-
-  // Load from DB if available, otherwise return local config
-  return await db.loadSettings(localConfig);
+  // Per-tenant versioned settings (kiyoh_tenant_settings). Each tenant has its
+  // own row history, so saving one tenant never changes another.
+  if (db.isDbEnabled) {
+    await db.ready;
+    try {
+      const row = await db.loadTenantSettings(tenant);
+      if (row) return row;
+    } catch (err) {
+      console.error('Error loading tenant settings for ' + tenant + ':', err.message);
+    }
+    // Not migrated yet (should not happen after startup): old behaviour.
+    if (isLocaleInstance(tenant)) return localConfig;
+    return await db.loadSettings(localConfig);
+  }
+  return localConfig;
 }
+
+/** Save one tenant's config: new version row (+ legacy mirror for kiyoh, + local file). */
+async function saveTenantConfig(tenant, config, meta = {}) {
+  try { fs.writeFileSync(getTenantConfigPath(tenant), JSON.stringify(config, null, 2)); } catch (e) { /* read-only FS is fine */ }
+  if (!db.isDbEnabled) return { db: false };
+  const row = await db.saveTenantSettings(tenant, config, meta);
+  if (!row) throw new Error('DB save failed');
+  // Mirror kiyoh into the legacy single-row table so an older deploy still works.
+  if (tenant === 'kiyoh') await db.saveSettings(config);
+  return { db: true, version: row.id };
+}
+
+/** Admin-login settings (2FA) are global and live on the kiyoh tenant. */
+const ADMIN_TENANT = 'kiyoh';
 
 // Middleware
 app.use(cors());
@@ -372,17 +440,10 @@ async function getMollieClient(tenant = 'kiyoh') {
   const config = await getConfig(tenant);
   const testMode = config.mollieTestMode !== false; // Default to true if not specified
   
-  // Priority: 1. per-tenant env var (MOLLIE_LIVE_KEY_KIYOH_CZ etc.), 2. global env var,
+  // Priority (unchanged): 0. optional env var NAME chosen in admin (payment.liveKeyEnv/testKeyEnv),
+  // 1. per-tenant env var (MOLLIE_LIVE_KEY_KIYOH_CZ etc.), 2. global env var,
   // 3. MOLLIE_API_KEY (matched by its test_/live_ prefix), 4. admin-saved config.
-  // No hardcoded key.
-  const suffix = '_' + String(tenant).toUpperCase().replace(/[^A-Z0-9]/g, '_');
-  const apiKeyEnv = process.env.MOLLIE_API_KEY || '';
-  const liveKey = process.env['MOLLIE_LIVE_KEY' + suffix] || process.env.MOLLIE_LIVE_KEY
-    || (apiKeyEnv.startsWith('live_') ? apiKeyEnv : '') || config.mollieLiveKey;
-  const testKey = process.env['MOLLIE_TEST_KEY' + suffix] || process.env.MOLLIE_TEST_KEY
-    || (apiKeyEnv.startsWith('test_') ? apiKeyEnv : '') || config.mollieTestKey;
-  
-  const apiKey = testMode ? testKey : liveKey;
+  const apiKey = tenants.resolveMollieKey(config, tenant, process.env, testMode).key;
   
   if (!apiKey) {
     console.error('MOLLIE ERROR: No API Key found for mode:', testMode ? 'TEST' : 'LIVE');
@@ -390,6 +451,93 @@ async function getMollieClient(tenant = 'kiyoh') {
 
   return createMollieClient({ apiKey: apiKey });
 }
+
+async function notifyCancellation(tenant, data, { test = false } = {}) {
+  const result = { email: 'skipped', webhook: null };
+  const mailer = await getSmtpTransporter(tenant, 'cancellation');
+  if (mailer && mailer.enabled !== false && mailer.to) {
+    await mailer.transporter.sendMail({
+      from: mailer.from, to: mailer.to, bcc: mailer.bcc || undefined,
+      subject: (test ? '[TEST] ' : '') + `Abonnement opgezegd (${getTenantName(tenant)} / ${tenant})`,
+      html: `<p>Abonnement opgezegd via het admin-portaal.</p><p>Klant: ${String(data.customerId || '')}<br>Abonnement: ${String(data.subscriptionId || '')}</p>`
+    });
+    result.email = 'sent';
+    await db.logEmail({ tenant, paymentId: String(data.subscriptionId || 'test-' + Date.now()).slice(0, 50), type: 'cancellation',
+      recipient: mailer.to, status: 'sent', source: test ? 'test' : 'admin' });
+  }
+  result.webhook = await fireEventWebhook(tenant, 'cancellation', data, { test });
+  return result;
+}
+
+// ─── TENANT ADMIN API ─────────────────────────────────────────────────────
+app.get('/api/tenants', (req, res) => {
+  res.json(tenants.TENANTS.map(t => ({ id: t.id, name: t.name, currency: t.currency, brandColor: t.brandColor, badge: t.badge })));
+});
+
+function tenantParam(req, res) {
+  const t = String(req.params.tenant || '').toLowerCase();
+  if (!tenants.isKnownTenant(t)) { res.status(404).json({ error: 'Unknown tenant' }); return null; }
+  return t;
+}
+
+app.get('/api/admin/tenants/:tenant/history', authMiddleware, async (req, res) => {
+  const t = tenantParam(req, res); if (!t) return;
+  res.json(await db.listTenantHistory(t, 50));
+});
+
+app.post('/api/admin/tenants/:tenant/rollback', authLimiter, authMiddleware, async (req, res) => {
+  const t = tenantParam(req, res); if (!t) return;
+  const v = await db.getTenantVersion(t, parseInt(req.body.versionId, 10));
+  if (!v) return res.status(404).json({ error: 'Version not found' });
+  const config = v.config;
+  if (t === ADMIN_TENANT) { // never roll back the admin 2FA state
+    const cur = await getConfig(t);
+    for (const k of tenants.GLOBAL_KEYS) { if (cur[k] === undefined) delete config[k]; else config[k] = cur[k]; }
+  }
+  const out = await saveTenantConfig(t, config, { note: 'Rollback to version ' + v.id, source: 'rollback' });
+  res.json({ success: true, version: out.version });
+});
+
+app.post('/api/admin/tenants/:tenant/copy-from', authLimiter, authMiddleware, async (req, res) => {
+  const t = tenantParam(req, res); if (!t) return;
+  const src = String(req.body.source || '').toLowerCase();
+  if (!tenants.isKnownTenant(src) || src === t) return res.status(400).json({ error: 'Invalid source tenant' });
+  const sections = (req.body.sections || []).filter(s => tenants.COPY_SECTIONS[s]);
+  if (!sections.length) return res.status(400).json({ error: 'No sections selected' });
+  const next = tenants.copySections(await getConfig(t), await getConfig(src), sections);
+  const out = await saveTenantConfig(t, next, { note: `Copied ${sections.join(', ')} from ${src}`, source: 'copy' });
+  res.json({ success: true, version: out.version });
+});
+
+app.get('/api/admin/payment-status', authMiddleware, async (req, res) => {
+  res.json(tenants.paymentStatus(await getConfig(req.tenant), req.tenant, process.env));
+});
+
+app.post('/api/admin/notifications/test', authLimiter, authMiddleware, async (req, res) => {
+  const event = String(req.body.event || '');
+  if (!tenants.EVENTS.includes(event)) return res.status(400).json({ error: 'Unknown event' });
+  const sample = { paymentId: 'test-' + Date.now(), businessName: 'Testbedrijf', customerEmail: 'test@example.com', packageId: 'pro', tenant: req.tenant };
+  try {
+    if (event === 'cancellation') return res.json(await notifyCancellation(req.tenant, { customerId: 'cst_test', subscriptionId: sample.paymentId }, { test: true }));
+    const mailer = await getSmtpTransporter(req.tenant, event);
+    let email = 'skipped';
+    if (mailer && mailer.enabled !== false && mailer.to) {
+      await mailer.transporter.sendMail({ from: mailer.from, to: mailer.to, bcc: mailer.bcc || undefined,
+        subject: `[TEST] ${event} — ${getTenantName(req.tenant)} (${req.tenant})`,
+        html: `<p>Test van de notificatie <strong>${event}</strong> voor tenant <strong>${req.tenant}</strong>.</p>` });
+      email = 'sent';
+      await db.logEmail({ tenant: req.tenant, paymentId: sample.paymentId, type: 'test:' + event, recipient: mailer.to, status: 'sent', source: 'test' });
+    } else if (!mailer) email = 'SMTP not configured';
+    const webhook = await fireEventWebhook(req.tenant, event, sample, { test: true });
+    res.json({ email, to: mailer && mailer.to, bcc: mailer && mailer.bcc, webhook });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/logs', authMiddleware, async (req, res) => {
+  res.json(await db.getEmailLogForTenant(req.tenant, Math.min(parseInt(req.query.limit, 10) || 100, 500)));
+});
 
 // Setup Config API Routes
 app.get('/api/config', async (req, res) => {
@@ -402,7 +550,7 @@ app.post('/api/auth', authLimiter, async (req, res) => {
   const { password } = req.body;
   if (!isAdminPw(password)) return res.status(401).json({ error: 'Unauthorized' });
 
-  const config = await getConfig(req.tenant);
+  const config = await getConfig(ADMIN_TENANT);
   if (config.twoFactorEnabled && config.twoFactorSecret) {
     return res.json({ ok: true, twoFactorRequired: true });
   }
@@ -424,7 +572,7 @@ app.post('/api/auth/2fa', authLimiter, async (req, res) => {
   const { password, code } = req.body;
   if (!isAdminPw(password)) return res.status(401).json({ error: 'Unauthorized' });
 
-  const config = await getConfig(req.tenant);
+  const config = await getConfig(ADMIN_TENANT);
   if (!config.twoFactorEnabled || !config.twoFactorSecret) {
     return res.status(400).json({ error: '2FA not enabled' });
   }
@@ -460,14 +608,12 @@ app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
     return res.status(401).json({ error: 'Invalid code' });
   }
 
-  const config = await getConfig(req.tenant);
+  const config = await getConfig(ADMIN_TENANT);
   config.twoFactorSecret = secret;
   config.twoFactorEnabled = true;
 
   try {
-    const configPath = getTenantConfigPath(req.tenant);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
+    await saveTenantConfig(ADMIN_TENANT, config, { note: '2FA enabled', source: 'admin' });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
@@ -475,14 +621,12 @@ app.post('/api/2fa/verify', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/2fa/disable', authMiddleware, async (req, res) => {
-  const config = await getConfig(req.tenant);
+  const config = await getConfig(ADMIN_TENANT);
   config.twoFactorEnabled = false;
   config.twoFactorSecret = null;
 
   try {
-    const configPath = getTenantConfigPath(req.tenant);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
+    await saveTenantConfig(ADMIN_TENANT, config, { note: '2FA disabled', source: 'admin' });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
@@ -494,15 +638,15 @@ app.post('/api/config', authLimiter, authMiddleware, async (req, res) => {
   // password in body is now optional since it's checked in header,
   // but we keep it for backward compatibility if needed, though middleware already checked headers.
   try {
-    // 1. Save to local file (for local dev/backups)
-    const configPath = getTenantConfigPath(req.tenant);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    // 2. Save to Database (for Railway persistence). Locale instances are file-only
-    //    (shared single-row DB settings would overwrite the NL config).
-    if (!isLocaleInstance(req.tenant)) await db.saveSettings(config);
-
-    res.json({ success: true, db: db.isDbEnabled });
+    // Only the selected tenant is written. 2FA (global admin login) is never
+    // taken from another tenant's form: keep the stored values.
+    const current = await getConfig(req.tenant);
+    for (const k of tenants.GLOBAL_KEYS) {
+      if (current[k] === undefined) delete config[k]; else config[k] = current[k];
+    }
+    const note = (req.query.note || '').toString().slice(0, 200) || 'Saved in admin';
+    const out = await saveTenantConfig(req.tenant, config, { note, source: 'admin' });
+    res.json({ success: true, db: out.db, version: out.version, tenant: req.tenant });
   } catch (err) {
     console.error('Save error:', err);
     res.status(500).json({ error: 'Could not save config' });
@@ -910,11 +1054,11 @@ app.post('/api/webhook', async (req, res) => {
           console.log('Sending lead to CRM webhook:', crmUrl);
           await crm.sendWonLead(crmUrl, payment.metadata, paymentId, { webhookSecret: crmSecret });
           console.log('CRM webhook sent successfully!');
-          await db.logEmail({ paymentId, type: 'crm',
+          await db.logEmail({ tenant: tenant, paymentId, type: 'crm',
             recipient: crmUrl, status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send CRM webhook:', err.message);
-          await db.logEmail({ paymentId, type: 'crm',
+          await db.logEmail({ tenant: tenant, paymentId, type: 'crm',
             recipient: crmUrl, status: 'failed',
             error: err.message, source: 'webhook' });
           criticalFailed = true;
@@ -922,7 +1066,7 @@ app.post('/api/webhook', async (req, res) => {
         }
       } else {
         console.warn('crmWebhookUrl not configured — CRM call skipped.');
-        await db.logEmail({ paymentId, type: 'crm',
+        await db.logEmail({ tenant: tenant, paymentId, type: 'crm',
           status: 'skipped', error: 'crmWebhookUrl not configured', source: 'webhook' });
       }
 
@@ -946,12 +1090,12 @@ app.post('/api/webhook', async (req, res) => {
       } else {
         try {
           await sendInternalNotification(payment.metadata, tenant);
-          await db.logEmail({ paymentId: payment.id, type: 'internal',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'internal',
             recipient: (await getConfig(tenant)).smtpTo || 'info@klantenvertellen.nl',
             status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send internal notification email:', err.message);
-          await db.logEmail({ paymentId: payment.id, type: 'internal',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'internal',
             status: 'failed', error: err.message, source: 'webhook' });
           criticalFailed = true;
           criticalError = criticalError || err.message;
@@ -965,19 +1109,19 @@ app.post('/api/webhook', async (req, res) => {
       } else if (!payment.metadata.invoice_id && payment.metadata.source !== 'sales-portal') {
         try {
           await sendCustomerWelcome(payment.metadata, signupUrl, tenant);
-          await db.logEmail({ paymentId: payment.id, type: 'customer',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'customer',
             recipient: payment.metadata.customerEmail,
             status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send customer welcome email:', err.message);
-          await db.logEmail({ paymentId: payment.id, type: 'customer',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'customer',
             recipient: payment.metadata.customerEmail,
             status: 'failed', error: err.message, source: 'webhook' });
           criticalFailed = true;
           criticalError = criticalError || err.message;
         }
       } else if (payment.metadata.source === 'sales-portal') {
-        await db.logEmail({ paymentId: payment.id, type: 'customer',
+        await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'customer',
           recipient: payment.metadata.customerEmail,
           status: 'skipped', error: 'Sales-portal deal — account wordt handmatig door sales opgezet',
           source: 'webhook' });
@@ -991,13 +1135,13 @@ app.post('/api/webhook', async (req, res) => {
           const mailer = await getSmtpTransporter(tenant);
           if (!mailer) throw new Error('SMTP not configured');
           await opdracht.sendToAccountant(payment.metadata, true, mailer, tenant);
-          await db.logEmail({ paymentId: payment.id, type: 'accountant',
-            recipient: 'administratie@kv-review.nl',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'accountant',
+            recipient: tenants.getNotifications(await getConfig(typeof dealTenant !== 'undefined' ? dealTenant : tenant)).accountant,
             status: 'sent', source: 'webhook' });
         } catch (err) {
           console.error('Failed to send opdracht-formulier to accountant:', err.message);
-          await db.logEmail({ paymentId: payment.id, type: 'accountant',
-            recipient: 'administratie@kv-review.nl',
+          await db.logEmail({ tenant: tenant, paymentId: payment.id, type: 'accountant',
+            recipient: tenants.getNotifications(await getConfig(typeof dealTenant !== 'undefined' ? dealTenant : tenant)).accountant,
             status: 'failed', error: err.message, source: 'webhook' });
           criticalFailed = true;
           criticalError = criticalError || err.message;
@@ -1075,7 +1219,8 @@ app.post('/api/subscribers/cancel', authMiddleware, async (req, res) => {
     const mollieClient = await getMollieClient(req.tenant);
     // Correct signature: cancel(subscriptionId, { customerId })
     await mollieClient.customerSubscriptions.cancel(subscriptionId, { customerId });
-    
+    notifyCancellation(req.tenant, { customerId, subscriptionId }).catch(err => console.error('Cancellation notify failed:', err.message));
+
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to cancel subscription:', error);
@@ -1372,11 +1517,11 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
         if (!crmUrl) throw new Error('crmWebhookUrl not configured');
         await crm.sendWonLead(crmUrl, meta, p.id, { webhookSecret: crmSecret });
         results.crm = { status: 'sent', recipient: crmUrl };
-        await db.logEmail({ paymentId: p.id, type: 'crm',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'crm',
           recipient: crmUrl, status: 'sent', source: 'manual' });
       } catch (err) {
         results.crm = { status: 'failed', error: err.message };
-        await db.logEmail({ paymentId: p.id, type: 'crm',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'crm',
           recipient: crmUrl, status: 'failed', error: err.message, source: 'manual' });
       }
     }
@@ -1385,12 +1530,12 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
       try {
         await sendInternalNotification(meta, dealTenant);
         results.internal = { status: 'sent' };
-        await db.logEmail({ paymentId: p.id, type: 'internal',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'internal',
           recipient: (await getConfig(dealTenant)).smtpTo || 'info@klantenvertellen.nl',
           status: 'sent', source: 'manual' });
       } catch (err) {
         results.internal = { status: 'failed', error: err.message };
-        await db.logEmail({ paymentId: p.id, type: 'internal',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'internal',
           status: 'failed', error: err.message, source: 'manual' });
       }
     }
@@ -1404,11 +1549,11 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
         const signupUrl = signupBuilder.buildSignupUrl(meta, base || undefined);
         await sendCustomerWelcome(meta, signupUrl, dealTenant);
         results.customer = { status: 'sent', recipient: meta.customerEmail };
-        await db.logEmail({ paymentId: p.id, type: 'customer',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'customer',
           recipient: meta.customerEmail, status: 'sent', source: 'manual' });
       } catch (err) {
         results.customer = { status: 'failed', error: err.message };
-        await db.logEmail({ paymentId: p.id, type: 'customer',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'customer',
           recipient: meta.customerEmail, status: 'failed',
           error: err.message, source: 'manual' });
       }
@@ -1419,13 +1564,13 @@ app.post('/api/deals/:id/resend', authMiddleware, async (req, res) => {
         const mailer = await getSmtpTransporter(dealTenant);
         if (!mailer) throw new Error('SMTP not configured');
         await opdracht.sendToAccountant(meta, p.status === 'paid', mailer, dealTenant);
-        results.accountant = { status: 'sent', recipient: 'administratie@kv-review.nl' };
-        await db.logEmail({ paymentId: p.id, type: 'accountant',
-          recipient: 'administratie@kv-review.nl', status: 'sent', source: 'manual' });
+        results.accountant = { status: 'sent', recipient: tenants.getNotifications(await getConfig(typeof dealTenant !== 'undefined' ? dealTenant : tenant)).accountant };
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'accountant',
+          recipient: tenants.getNotifications(await getConfig(typeof dealTenant !== 'undefined' ? dealTenant : tenant)).accountant, status: 'sent', source: 'manual' });
       } catch (err) {
         results.accountant = { status: 'failed', error: err.message };
-        await db.logEmail({ paymentId: p.id, type: 'accountant',
-          recipient: 'administratie@kv-review.nl', status: 'failed',
+        await db.logEmail({ tenant: dealTenant, paymentId: p.id, type: 'accountant',
+          recipient: tenants.getNotifications(await getConfig(typeof dealTenant !== 'undefined' ? dealTenant : tenant)).accountant, status: 'failed',
           error: err.message, source: 'manual' });
       }
     }
@@ -1552,7 +1697,7 @@ app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
     await transporter.sendMail({
       from: `"Kiyoh Betalingen" <${smtpFrom}>`,
       to: smtpTo,
-      bcc: ALWAYS_BCC,
+      bcc: tenants.getNotifications(config).cc.join(', ') || undefined,
       subject: '✅ Test e-mail van Kiyoh betalingssysteem',
       html: `<div style="font-family:Arial,sans-serif;padding:24px;">
         <h2 style="color:#f58220;">E-mail configuratie werkt!</h2>
@@ -1561,7 +1706,7 @@ app.post('/api/admin/test-email', authMiddleware, async (req, res) => {
       </div>`
     });
 
-    res.json({ success: true, message: `Test e-mail verstuurd naar ${smtpTo} (bcc ${ALWAYS_BCC})` });
+    res.json({ success: true, message: `Test e-mail verstuurd naar ${smtpTo} (bcc ${tenants.getNotifications(config).cc.join(', ') || '—'})` });
   } catch (err) {
     console.error('Test email failed:', err);
     res.status(500).json({ error: 'Versturen mislukt: ' + err.message });
@@ -1625,9 +1770,22 @@ app.get('/klantenvertellen-setup', async (req, res) => {
   res.redirect(url);
 });
 
-// Start Server
-app.listen(port, () => {
+// Start Server (after per-tenant settings are migrated)
+async function migrateSettingsOnStartup() {
+  if (!db.isDbEnabled) return;
+  await db.ready;
+  const seeds = {};
+  for (const t of KNOWN_TENANTS) {
+    try { seeds[t] = JSON.parse(fs.readFileSync(getTenantConfigPath(t), 'utf8')); }
+    catch (e) { seeds[t] = { packages: [], modules: [], coreFeatures: [] }; }
+  }
+  // kiyoh + klantenvertellen serve the legacy shared DB row today; kiyoh-cz serves its file.
+  const done = await db.migrateTenantSettings(seeds, ['kiyoh', 'klantenvertellen']);
+  if (done.length) console.log('Tenant settings migrated:', JSON.stringify(done));
+}
+
+migrateSettingsOnStartup().catch(err => console.error('Tenant settings migration failed:', err)).finally(() => app.listen(port, () => {
   console.log(`Server draait op http://localhost:${port}`);
   console.log('Open your browser and navigate to http://localhost:3000 om de tarieven pagina te zien.');
-});
+}));
 

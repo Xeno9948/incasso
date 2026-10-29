@@ -180,7 +180,9 @@
       <select id="tenant-selector" style="padding: 8px 12px; border: 2px solid #eee; border-radius: 6px; font-family: inherit; cursor: pointer;">
         <option value="kiyoh">Kiyoh</option>
         <option value="klantenvertellen">Klantenvertellen</option>
+        <option value="kiyoh-cz">Kiyoh CZ</option>
       </select>
+      <span id="tenant-badge" style="padding:6px 12px;border-radius:999px;color:#fff;font-weight:700;font-size:.8rem;background:#f58220;">kiyoh</span>
       <span id="save-status"><i class="fas fa-check"></i> Opgeslagen</span>
       <button id="save-btn" class="save-btn" onclick="saveConfig()"><i class="fas fa-save"></i> Wijzigingen opslaan</button>
       <button class="icon-btn" onclick="logout()" title="Uitloggen" style="color:#888;"><i class="fas fa-sign-out-alt"></i></button>
@@ -200,6 +202,8 @@
         <a href="#" onclick="showSection('google', this)"><i class="fas fa-chart-line"></i> Google Ads</a>
         <a href="#" onclick="showSection('crm', this)"><i class="fas fa-shuttle-space"></i> CRM / Webhook</a>
         <a href="#" onclick="showSection('email', this)"><i class="fas fa-envelope"></i> E-mail Instellingen</a>
+        <a href="#" onclick="showSection('payment', this)"><i class="fas fa-key"></i> Betaalprovider</a>
+        <a href="#" onclick="showSection('notifications', this)"><i class="fas fa-bell"></i> Notificaties</a>
         <a href="#" onclick="showSection('security', this)"><i class="fas fa-shield-halved"></i> Beveiliging</a>
         
         <div class="section-label">Overzicht</div>
@@ -207,6 +211,10 @@
         <a href="#" onclick="showSection('deals', this)"><i class="fas fa-file-invoice"></i> Deals & Mails</a>
         <a href="#" onclick="showSection('subscribers', this)"><i class="fas fa-users"></i> Abonnementen</a>
         
+        <div class="section-label">Tenant</div>
+        <a href="#" onclick="showSection('versions', this)"><i class="fas fa-clock-rotate-left"></i> Versies &amp; kopieren</a>
+        <a href="#" onclick="showSection('logs', this)"><i class="fas fa-list"></i> Logs</a>
+
         <div class="section-label">Publiceren</div>
         <a href="#" onclick="showSection('embed', this)"><i class="fas fa-code"></i> Embed Code</a>
       </nav>
@@ -297,6 +305,10 @@
           <div class="field full">
             <label>BTW Percentage (%)</label>
             <input type="number" id="mollie-vat-percentage" step="0.1" value="21">
+          </div>
+          <div class="field full">
+            <label>Valuta (alleen deze tenant)</label>
+            <select id="tenant-currency"><option value="">(standaard: EUR)</option><option value="EUR">EUR</option><option value="CZK">CZK</option></select>
           </div>
         </div>
       </section>
@@ -595,6 +607,45 @@
       </section>
 
       <!-- Embed Code -->
+      <section id="section-payment" class="section">
+        <h2>Betaalprovider <span class="tenant-name-inline"></span></h2>
+        <p class="section-desc">Per tenant. Sleutels staan als Railway-variabele; hier kies je alleen de naam van de variabele. Leeg = standaard volgorde.</p>
+        <div class="field-grid">
+          <div class="field"><label>Provider</label><select id="pay-provider"><option value="mollie">Mollie</option></select></div>
+          <div class="field"><label>Modus</label><input type="text" id="pay-mode" disabled></div>
+          <div class="field"><label>Env-variabele live key (naam)</label><input type="text" id="pay-live-env"></div>
+          <div class="field"><label>Env-variabele test key (naam)</label><input type="text" id="pay-test-env"></div>
+          <div class="field full"><div id="pay-status" style="padding:12px;border-radius:10px;background:#f7f7f7;font-size:.85rem;">Laden...</div></div>
+        </div>
+      </section>
+
+      <section id="section-notifications" class="section">
+        <h2>Notificaties <span class="tenant-name-inline"></span></h2>
+        <p class="section-desc">Per tenant en per gebeurtenis: ontvangers (komma-gescheiden), webhook-URL en geheim (HMAC-SHA256, header X-Kiyoh-Signature). De CC-lijst gaat als BCC mee op alle mails van deze tenant. De CRM-webhook blijft apart.</p>
+        <div class="field-grid">
+          <div class="field full"><label>CC-lijst (BCC op alle mails)</label><input type="text" id="notif-cc"></div>
+          <div class="field full"><label>Boekhouding (opdrachtformulier)</label><input type="text" id="notif-accountant"></div>
+        </div>
+        <div id="notif-events"></div>
+      </section>
+
+      <section id="section-versions" class="section">
+        <h2>Versies en kopieren <span class="tenant-name-inline"></span></h2>
+        <p class="section-desc">Elke opslag maakt een nieuwe versie voor alleen deze tenant. Terugzetten maakt ook een nieuwe versie.</p>
+        <div class="field-grid">
+          <div class="field"><label>Kopieer van tenant</label><select id="copy-source"></select></div>
+          <div class="field full" id="copy-sections" style="display:flex;flex-wrap:wrap;gap:12px;font-size:.85rem;"></div>
+          <div class="field full"><button class="save-btn" id="copy-btn"><i class="fas fa-copy"></i> Kopieren naar deze tenant</button></div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:.85rem;"><tbody id="history-body"></tbody></table>
+      </section>
+
+      <section id="section-logs" class="section">
+        <h2>Logs <span class="tenant-name-inline"></span></h2>
+        <p class="section-desc">E-mails en webhooks van deze tenant (nieuwste eerst).</p>
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem;"><tbody id="logs-body"></tbody></table>
+      </section>
+
       <section id="section-embed" class="section">
         <h2>Embed Code</h2>
         <p class="section-desc">Kopieer deze code en plaats deze op je website waar je de tarieven wilt tonen.</p>
@@ -1910,5 +1961,6 @@ async function disable2FA() {
    }
 }
 </script>
+<script src="admin-tenant.js?v=2"></script>
 </body>
 </html>
