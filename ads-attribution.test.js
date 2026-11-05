@@ -251,6 +251,71 @@ test('unpaid retries are only for statuses that can still become paid', () => {
   assert.equal(ads.shouldRetryUnpaidStatus('paid'), false);
 });
 
+test('normalizeMarketingReturnUrl accepts allowlisted https parent pages only', () => {
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.kiyoh.com/aanmelden/?lang=nl', 'kiyoh'),
+    'https://www.kiyoh.com/aanmelden/?lang=nl'
+  );
+  assert.equal(ads.normalizeMarketingReturnUrl('http://www.kiyoh.com/aanmelden/', 'kiyoh'), '');
+  assert.equal(ads.normalizeMarketingReturnUrl('https://evil.com/aanmelden/', 'kiyoh'), '');
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.klantenvertellen.nl/prijzen/', 'klantenvertellen'),
+    'https://www.klantenvertellen.nl/prijzen/'
+  );
+});
+
+test('buildMarketingRecoveryRedirect adds orderId only (no email or tenant param)', () => {
+  const url = ads.buildMarketingRecoveryRedirect({
+    marketingReturnUrl: 'https://www.kiyoh.com/aanmelden/?lang=nl',
+    tenant: 'kiyoh',
+    orderId: 'tr_ouXTQ4tsGTcGLeczUygYJ'
+  });
+  const parsed = new URL(url);
+  assert.equal(parsed.origin + parsed.pathname, 'https://www.kiyoh.com/aanmelden/');
+  assert.equal(parsed.searchParams.get('orderId'), 'tr_ouXTQ4tsGTcGLeczUygYJ');
+  assert.equal(parsed.searchParams.get('lang'), 'nl');
+  assert.equal(parsed.searchParams.get('tenant'), null);
+  assert.equal(parsed.searchParams.get('email'), null);
+  assert.equal(url.includes('@'), false);
+
+  const fallback = ads.buildMarketingRecoveryRedirect({
+    tenant: 'kiyoh',
+    orderId: 'tr_abc'
+  });
+  assert.equal(new URL(fallback).searchParams.get('orderId'), 'tr_abc');
+  assert.ok(fallback.startsWith('https://www.kiyoh.com/aanmelden/'));
+});
+
+test('checkout-complete includes marketingRedirect for paid storefront checkouts', () => {
+  const paid = {
+    id: 'tr_paid',
+    status: 'paid',
+    metadata: {
+      tenant: 'kiyoh',
+      packageSlug: 'go',
+      packageId: 'Go',
+      language: 'nl',
+      yearlyAmount: '508.20',
+      yearlyAmountExVat: '420.00',
+      customerEmail: 'buyer@example.com',
+      marketingReturnUrl: 'https://www.kiyoh.com/aanmelden/'
+    }
+  };
+  const ok = ads.buildCheckoutCompleteResponse(paid, 'kiyoh');
+  assert.equal(ok.body.notify, true);
+  assert.equal(
+    ok.body.marketingRedirect,
+    'https://www.kiyoh.com/aanmelden/?orderId=tr_paid'
+  );
+
+  const kv = ads.buildCheckoutCompleteResponse({
+    ...paid,
+    metadata: { ...paid.metadata, tenant: 'klantenvertellen', marketingReturnUrl: 'https://www.klantenvertellen.nl/aanmelden/' }
+  }, 'klantenvertellen');
+  assert.equal(kv.body.notify, false);
+  assert.equal(kv.body.marketingRedirect, 'https://www.klantenvertellen.nl/aanmelden/?orderId=tr_paid');
+});
+
 test('success.html and the iframe relay target parent origins and do not load pixels', () => {
   const fs = require('fs');
   const success = fs.readFileSync(require('path').join(__dirname, 'public/success.html'), 'utf8');
@@ -270,7 +335,11 @@ test('success.html and the iframe relay target parent origins and do not load pi
   assert.ok(success.includes(ads.CHECKOUT_CHANNEL));
   assert.ok(success.includes('sessionStorage'));
   assert.ok(success.includes('localStorage'));
+  assert.ok(success.includes('marketingRedirect'));
+  assert.ok(success.includes('inIframe'));
+  assert.ok(success.includes('location.replace'));
   assert.ok(appJs.includes(ads.CHECKOUT_CHANNEL));
+  assert.ok(appJs.includes('marketingReturnUrl'));
   assert.equal(index.includes('gtag('), false);
   assert.equal(index.includes('googletagmanager'), false);
   assert.equal(index.includes('fbq('), false);

@@ -47,6 +47,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     'https://www.kiyoh.com',
     'https://kiyoh-com-production.up.railway.app'
   ];
+  const KV_PARENT_ORIGINS = [
+    'https://klantenvertellen.nl',
+    'https://www.klantenvertellen.nl'
+  ];
+
+  function captureMarketingReturnUrl(tenant) {
+    const allowed = tenant === 'klantenvertellen'
+      ? KV_PARENT_ORIGINS
+      : KIYOH_PARENT_ORIGINS;
+    try {
+      if (!document.referrer) return '';
+      const ref = new URL(document.referrer);
+      if (!allowed.includes(ref.origin)) return '';
+      return ref.origin + ref.pathname + ref.search;
+    } catch (e) {
+      return '';
+    }
+  }
   const CLICK_IDS = ['gclid', 'gbraid', 'wbraid', 'fbclid'];
   const CHECKOUT_CHANNEL = 'kiyoh_checkout_complete';
 
@@ -494,6 +512,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const tenant = urlParams.get('tenant') || 'kiyoh';
 
+      const marketingReturnUrl = captureMarketingReturnUrl(tenant);
+
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -503,6 +523,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           utms,
           language,
           tenant,
+          marketingReturnUrl: marketingReturnUrl || undefined,
           billing: (document.getElementById('billing-period') || {}).value || 'yearly'
         })
       });
