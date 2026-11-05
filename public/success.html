@@ -20,7 +20,7 @@
     <div class="icon-success">✓</div>
     <h1>Bedankt voor je bestelling!</h1>
     <p class="mb-4">Je betaling is succesvol afgerond. We gaan direct voor je aan de slag. Je ontvangt zometeen een bevestiging per e-mail met meer informatie over het opzetten van je account.</p>
-    <a href="https://kiyoh.com/tarieven" class="btn btn-primary mt-4">Terug naar Home</a>
+    <a id="home-link" href="https://www.kiyoh.com/aanmelden/" class="btn btn-primary mt-4">Terug naar Home</a>
   </div>
   <script>
     (function () {
@@ -37,6 +37,7 @@
       var params = new URLSearchParams(window.location.search);
       var orderId = params.get('orderId') || '';
       var tenant = params.get('tenant') || 'kiyoh';
+      var inIframe = window.parent && window.parent !== window;
       if (!orderId) return;
 
       var dedupeKey = 'kiyoh_ads_notified_' + orderId;
@@ -117,6 +118,16 @@
           sent = true;
           markSent();
           postConversion(payload);
+          // Top-level return from Mollie (popup blocked / parent navigated away):
+          // bounce to the marketing site with orderId only so GTM can recover.
+          if (data.marketingRedirect) {
+            var home = document.getElementById('home-link');
+            if (home) home.href = data.marketingRedirect;
+            if (!inIframe) {
+              window.location.replace(data.marketingRedirect);
+              return;
+            }
+          }
         }).catch(function () {
           if (!sent && attempt < 8) setTimeout(function () { notify(attempt + 1); }, 750);
         });

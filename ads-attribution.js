@@ -39,6 +39,14 @@ const KIYOH_PARENT_ORIGINS = Object.freeze([
   'https://www.kiyoh.com',
   'https://kiyoh-com-production.up.railway.app'
 ]);
+const KLANTENVERTELLEN_PARENT_ORIGINS = Object.freeze([
+  'https://klantenvertellen.nl',
+  'https://www.klantenvertellen.nl'
+]);
+const DEFAULT_MARKETING_RETURN_URL = Object.freeze({
+  kiyoh: 'https://www.kiyoh.com/aanmelden/',
+  klantenvertellen: 'https://www.klantenvertellen.nl/aanmelden/'
+});
 const PACKAGE_SLUGS = Object.freeze(['go', 'pro', 'premium']);
 // Google Ads offline import accepts at most one click id. gclid is standard
 // web; wbraid is iOS web; gbraid is iOS app. Used only for the CRM payload.
@@ -251,12 +259,69 @@ function buildConversionMessage({ packageSlug, language, value, orderId, email }
   return message;
 }
 
-function shouldNotifyKiyohAds(metadata, tenant) {
-  if ((tenant || (metadata && metadata.tenant) || 'kiyoh') !== 'kiyoh') return false;
+function isStorefrontPackageCheckout(metadata) {
   if (!metadata) return false;
   if (metadata.source === 'sales-portal') return false;
   if (metadata.invoice_id) return false;
   return !!normalizePackageSlug(metadata.packageSlug || metadata.packageId);
+}
+
+function marketingOriginsForTenant(tenant) {
+  const t = asTrimmedString(tenant).toLowerCase() || 'kiyoh';
+  if (t === 'klantenvertellen') return KLANTENVERTELLEN_PARENT_ORIGINS;
+  return KIYOH_PARENT_ORIGINS;
+}
+
+/**
+ * Allowlisted marketing page the buyer came from (iframe referrer). Stored on
+ * the Mollie payment so top-level success can bounce back with orderId only.
+ */
+function normalizeMarketingReturnUrl(value, tenant) {
+  const raw = asTrimmedString(value);
+  if (!raw) return '';
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (e) {
+    return '';
+  }
+  if (parsed.protocol !== 'https:') return '';
+  const allowed = marketingOriginsForTenant(tenant);
+  if (!allowed.includes(parsed.origin)) return '';
+  // Drop hash; keep path + search from the landing page.
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+}
+
+function defaultMarketingReturnUrl(tenant) {
+  const t = asTrimmedString(tenant).toLowerCase() || 'kiyoh';
+  return DEFAULT_MARKETING_RETURN_URL[t] || DEFAULT_MARKETING_RETURN_URL.kiyoh;
+}
+
+/**
+ * Top-level success redirect: same allowlisted site, orderId query only (no PII).
+ */
+function buildMarketingRecoveryRedirect({ marketingReturnUrl, tenant, orderId } = {}) {
+  const id = asTrimmedString(orderId);
+  if (!/^tr_[A-Za-z0-9]+$/.test(id)) return '';
+  const base = normalizeMarketingReturnUrl(marketingReturnUrl, tenant) ||
+    defaultMarketingReturnUrl(tenant);
+  let u;
+  try {
+    u = new URL(base);
+  } catch (e) {
+    return '';
+  }
+  u.searchParams.set('orderId', id);
+  return u.toString();
+}
+
+function shouldNotifyKiyohAds(metadata, tenant) {
+  if ((tenant || (metadata && metadata.tenant) || 'kiyoh') !== 'kiyoh') return false;
+  return isStorefrontPackageCheckout(metadata);
+}
+
+function shouldRecoverOnMarketingSite(metadata, tenant) {
+  return isStorefrontPackageCheckout(metadata);
 }
 
 /**
@@ -282,8 +347,19 @@ function buildCheckoutCompleteResponse(payment, tenant) {
   }
 
   const metadata = payment.metadata || {};
-  if (!shouldNotifyKiyohAds(metadata, metadata.tenant || tenant)) {
-    return { httpStatus: 200, body: { notify: false, orderId } };
+  const resolvedTenant = metadata.tenant || tenant || 'kiyoh';
+  const marketingRedirect = shouldRecoverOnMarketingSite(metadata, resolvedTenant)
+    ? buildMarketingRecoveryRedirect({
+        marketingReturnUrl: metadata.marketingReturnUrl,
+        tenant: resolvedTenant,
+        orderId: payment.id
+      })
+    : '';
+
+  if (!shouldNotifyKiyohAds(metadata, resolvedTenant)) {
+    const body = { notify: false, orderId };
+    if (marketingRedirect) body.marketingRedirect = marketingRedirect;
+    return { httpStatus: 200, body };
   }
 
   const packageSlug = normalizePackageSlug(metadata.packageSlug || metadata.packageId);
@@ -296,14 +372,20 @@ function buildCheckoutCompleteResponse(payment, tenant) {
   });
 
   if (!message.package || !message.value) {
-    return { httpStatus: 200, body: { notify: false, orderId } };
+    const body = { notify: false, orderId };
+    if (marketingRedirect) body.marketingRedirect = marketingRedirect;
+    return { httpStatus: 200, body };
   }
 
-  return { httpStatus: 200, body: { notify: true, ...message } };
+  const body = { notify: true, ...message };
+  if (marketingRedirect) body.marketingRedirect = marketingRedirect;
+  return { httpStatus: 200, body };
 }
 
 module.exports = {
   KIYOH_PARENT_ORIGINS,
+  KLANTENVERTELLEN_PARENT_ORIGINS,
+  DEFAULT_MARKETING_RETURN_URL,
   PACKAGE_SLUGS,
   CLICK_ID_PRIORITY,
   CLICK_IDS_TO_PERSIST,
@@ -320,8 +402,13 @@ module.exports = {
   compactUtmsForMollie,
   fitMollieMetadata,
   buildSuccessRedirectUrl,
+  buildMarketingRecoveryRedirect,
+  normalizeMarketingReturnUrl,
+  defaultMarketingReturnUrl,
   buildConversionMessage,
   shouldNotifyKiyohAds,
+  shouldRecoverOnMarketingSite,
+  isStorefrontPackageCheckout,
   shouldRetryUnpaidStatus,
   buildCheckoutCompleteResponse
 };

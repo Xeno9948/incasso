@@ -689,7 +689,7 @@ app.post('/api/upload', authMiddleware, async (req, res) => {
 // Setup Checkout API Route
 app.post('/api/checkout', async (req, res) => {
   try {
-    const { package, modules, customer, utms, language } = req.body;
+    const { package, modules, customer, utms, language, marketingReturnUrl: rawMarketingReturnUrl } = req.body;
 
     // Get client IP for UTMs if possible
     const user_ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
@@ -783,6 +783,7 @@ app.post('/api/checkout', async (req, res) => {
     const sequenceType = isRecurring ? 'first' : 'oneoff';
 
     const yearlyAmountExVat = ads.conversionValueExVat(yearlyTotalExcl).toFixed(2);
+    const marketingReturnUrl = ads.normalizeMarketingReturnUrl(rawMarketingReturnUrl, req.tenant);
     const paymentMetadata = ads.fitMollieMetadata({
       tenant: req.tenant,
       currency,
@@ -793,6 +794,7 @@ app.post('/api/checkout', async (req, res) => {
       packageId: package.name,
       packageSlug: packageSlug || undefined,
       language: checkoutLanguage,
+      marketingReturnUrl: marketingReturnUrl || undefined,
       yearlyAmount: amountStr,
       yearlyAmountExVat,
       description: descriptionStr,
