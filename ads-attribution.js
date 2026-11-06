@@ -288,6 +288,23 @@ function normalizeMarketingReturnUrl(value, tenant) {
   if (parsed.protocol !== 'https:') return '';
   const allowed = marketingOriginsForTenant(tenant);
   if (!allowed.includes(parsed.origin)) return '';
+  // Referrer policy (e.g. strict-origin-when-cross-origin) often sends only the
+  // origin for cross-origin subresource loads — URL parses as "https://www.kiyoh.com/"
+  // with path "/". That was stored and bounced buyers to homepage, which has no
+  // orderId recovery. Map homepage-only URLs to the default recovery path.
+  const pathOnly = parsed.pathname === '/' || parsed.pathname === '';
+  if (pathOnly) {
+    let def;
+    try {
+      def = new URL(defaultMarketingReturnUrl(tenant));
+    } catch (e) {
+      return '';
+    }
+    parsed.searchParams.forEach((val, key) => {
+      if (!def.searchParams.has(key)) def.searchParams.set(key, val);
+    });
+    return `${def.origin}${def.pathname}${def.search}`;
+  }
   // Drop hash; keep path + search from the landing page.
   return `${parsed.origin}${parsed.pathname}${parsed.search}`;
 }

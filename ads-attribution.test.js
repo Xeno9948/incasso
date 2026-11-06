@@ -264,6 +264,59 @@ test('normalizeMarketingReturnUrl accepts allowlisted https parent pages only', 
   );
 });
 
+test('normalizeMarketingReturnUrl maps origin-only referrer (/) to default recovery path', () => {
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.kiyoh.com/', 'kiyoh'),
+    'https://www.kiyoh.com/aanmelden/'
+  );
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.kiyoh.com', 'kiyoh'),
+    'https://www.kiyoh.com/aanmelden/'
+  );
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.kiyoh.com/?lang=en', 'kiyoh'),
+    'https://www.kiyoh.com/aanmelden/?lang=en'
+  );
+  assert.equal(
+    ads.normalizeMarketingReturnUrl('https://www.klantenvertellen.nl/', 'klantenvertellen'),
+    'https://www.klantenvertellen.nl/aanmelden/'
+  );
+});
+
+test('buildMarketingRecoveryRedirect uses recovery path when metadata stored homepage only', () => {
+  const url = ads.buildMarketingRecoveryRedirect({
+    marketingReturnUrl: 'https://www.kiyoh.com/',
+    tenant: 'kiyoh',
+    orderId: 'tr_proNov5'
+  });
+  assert.equal(
+    url,
+    'https://www.kiyoh.com/aanmelden/?orderId=tr_proNov5'
+  );
+});
+
+test('checkout-complete marketingRedirect for legacy orders with homepage marketingReturnUrl', () => {
+  const paid = {
+    id: 'tr_legacy',
+    status: 'paid',
+    metadata: {
+      tenant: 'kiyoh',
+      packageSlug: 'pro',
+      language: 'nl',
+      yearlyAmount: '653.40',
+      yearlyAmountExVat: '540.00',
+      customerEmail: 'buyer@example.com',
+      marketingReturnUrl: 'https://www.kiyoh.com/'
+    }
+  };
+  const ok = ads.buildCheckoutCompleteResponse(paid, 'kiyoh');
+  assert.equal(ok.body.notify, true);
+  assert.equal(
+    ok.body.marketingRedirect,
+    'https://www.kiyoh.com/aanmelden/?orderId=tr_legacy'
+  );
+});
+
 test('buildMarketingRecoveryRedirect adds orderId only (no email or tenant param)', () => {
   const url = ads.buildMarketingRecoveryRedirect({
     marketingReturnUrl: 'https://www.kiyoh.com/aanmelden/?lang=nl',
