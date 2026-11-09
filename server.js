@@ -900,17 +900,34 @@ const checkoutCompleteLimiter = rateLimit({
 });
 
 /**
- * Success page calls this after Mollie redirects. Confirms the payment is
- * exactly 'paid', then returns the Path 1 postMessage payload.
+ * Success page and allowlisted marketing parents call this after Mollie
+ * redirects / for orderId recovery. Confirms the payment is exactly 'paid',
+ * then returns the Path 1 postMessage payload.
  * value is the yearly total excluding VAT. email is the buyer address for
  * enhanced conversions on the parent; nothing else identifying is returned.
- * Same-origin only: the success page is on this host. Do not let other
- * sites read the email.
+ * CORS + CORP: allow only KIYOH_PARENT_ORIGINS / KLANTENVERTELLEN_PARENT_ORIGINS
+ * so www can recover; strip ACAO and keep CORP same-origin for everyone else
+ * so arbitrary sites cannot read the email.
  */
-app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
-  res.setHeader('Cache-Control', 'private, no-store');
+function applyCheckoutCompleteCrossOriginHeaders(req, res) {
+  const origin = String(req.headers.origin || '').trim();
+  const allowed = new Set([
+    ...ads.KIYOH_PARENT_ORIGINS,
+    ...ads.KLANTENVERTELLEN_PARENT_ORIGINS,
+  ]);
+  if (origin && allowed.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return;
+  }
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.removeHeader('Access-Control-Allow-Origin');
+}
+
+app.get('/api/checkout-complete', checkoutCompleteLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  applyCheckoutCompleteCrossOriginHeaders(req, res);
 
   const orderId = String(req.query.orderId || '').trim();
   if (!/^tr_[A-Za-z0-9]+$/.test(orderId)) {
